@@ -30,9 +30,6 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# 接收构建参数
-ARG TARGETPLATFORM
-
 # 根据目标平台设置 Rust target
 RUN case "$TARGETPLATFORM" in \
     "linux/amd64") echo "x86_64-unknown-linux-musl" > /rust_target.txt ;; \
