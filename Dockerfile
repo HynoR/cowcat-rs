@@ -3,7 +3,7 @@
 # ============================================
 # 第一阶段：准备 cargo-chef
 # ============================================
-FROM --platform=$BUILDPLATFORM rust:latest AS chef
+FROM --platform=$TARGETPLATFORM rust:latest AS chef
 
 RUN cargo install cargo-chef
 WORKDIR /app
@@ -23,7 +23,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 # ============================================
 FROM chef AS builder
 
-# 安装交叉编译工具链
+# 安装 musl 工具链
 RUN apt-get update && apt-get install -y \
     musl-tools \
     musl-dev \
@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y \
 
 # 接收构建参数
 ARG TARGETPLATFORM
-ARG BUILDPLATFORM
 
 # 根据目标平台设置 Rust target
 RUN case "$TARGETPLATFORM" in \
@@ -41,23 +40,6 @@ RUN case "$TARGETPLATFORM" in \
     *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac && \
     rustup target add $(cat /rust_target.txt)
-
-# 安装 musl 交叉编译工具（用于 ARM64）
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-    apt-get update && \
-    apt-get install -y wget && \
-    wget https://musl.cc/aarch64-linux-musl-cross.tgz && \
-    tar -xzf aarch64-linux-musl-cross.tgz -C /opt && \
-    rm aarch64-linux-musl-cross.tgz && \
-    apt-get remove -y wget && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*; \
-    fi
-
-# 设置交叉编译环境变量
-ENV PATH="/opt/aarch64-linux-musl-cross/bin:$PATH" \
-    CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc \
-    CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc
 
 # 复制依赖配方
 COPY --from=planner /app/recipe.json recipe.json
