@@ -1,0 +1,28 @@
+[package]
+name = "cowcat-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7"
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+cookie = "0.18"
+hex = "0.4"
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "tokio"] }
+ipnet = "2"
+ring = "0.17"
+rust-embed = "8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = "0.3"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "compression-br"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

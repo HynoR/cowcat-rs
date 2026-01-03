@@ -1,0 +1,34 @@
+[server]
+listen = "0.0.0.0:8080"
+
+[pow]
+difficulty = 3
+cookie_expire_hours = 24
+salt = "awgawmlfa"
+workers = 4
+worker_type = "wasm"
+ip_policy = "none"
+test_mode = false
+
+[proxy]
+target = "http://127.0.0.1:1234"
+
+[rules]
+enabled = true
+default_action = "challenge"
+
+[[rules.rule]]
+name = "acme-http01"
+path_prefix = "/.well-known/acme-challenge/"
+action = "allow"
+
+[[rules.rule]]
+name = "uptime-bot"
+header = { name = "User-Agent", contains = "UptimeRobot" }
+action = "challenge"
+difficulty_delta = -2
+
+[[rules.rule]]
+name = "block-admin"
+path_prefix = "/admin"
+action = "block"
