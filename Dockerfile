@@ -16,7 +16,7 @@ FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 
-RUN cargo chef prepare --recipe-path recipe. json
+RUN cargo chef prepare --recipe-path recipe.json
 
 # ============================================
 # 第三阶段：构建依赖和应用
@@ -36,19 +36,19 @@ ARG BUILDPLATFORM
 
 # 根据目标平台设置 Rust target
 RUN case "$TARGETPLATFORM" in \
-    "linux/amd64") echo "x86_64-unknown-linux-musl" > /rust_target. txt ;; \
+    "linux/amd64") echo "x86_64-unknown-linux-musl" > /rust_target.txt ;; \
     "linux/arm64") echo "aarch64-unknown-linux-musl" > /rust_target.txt ;; \
     *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac && \
-    rustup target add $(cat /rust_target. txt)
+    rustup target add $(cat /rust_target.txt)
 
 # 安装 musl 交叉编译工具（用于 ARM64）
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
     apt-get update && \
     apt-get install -y wget && \
     wget https://musl.cc/aarch64-linux-musl-cross.tgz && \
-    tar -xzf aarch64-linux-musl-cross. tgz -C /opt && \
-    rm aarch64-linux-musl-cross. tgz && \
+    tar -xzf aarch64-linux-musl-cross.tgz -C /opt && \
+    rm aarch64-linux-musl-cross.tgz && \
     apt-get remove -y wget && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*; \
@@ -91,7 +91,7 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=builder /app/build/cowcat-rs /usr/local/bin/cowcat-rs
-COPY config.toml. example /app/config.toml.example
+COPY config.toml.example /app/config.toml.example
 
 # 创建非 root 用户（可选但推荐）
 RUN addgroup -g 1000 appuser && \
