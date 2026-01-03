@@ -23,6 +23,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 # ============================================
 FROM chef AS builder
 
+# 需要显式声明才能在 RUN 中使用
+ARG TARGETPLATFORM
+
 # 安装 musl 工具链
 RUN apt-get update && apt-get install -y \
     musl-tools \
