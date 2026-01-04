@@ -38,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     tracing_subscriber::fmt()
+        .json()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 

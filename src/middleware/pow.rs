@@ -79,7 +79,49 @@ pub async fn pow_gate(
         };
     }
 
-    tracing::info!(difficulty = state.config.pow.difficulty, "pow challenge (default)");
+    // 收集和打印用户信息
+    let client_ip = if state.config.pow.ip_policy != IpPolicy::None {
+        crate::crypto::extract_client_ip(req.headers(), req.extensions(), state.config.pow.ip_policy)
+    } else {
+        String::new()
+    };
+    let x_forwarded_for = req.headers()
+        .get(header::HeaderName::from_static("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let x_real_ip = req.headers()
+        .get(header::HeaderName::from_static("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let user_agent = req.headers()
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let accept_language = req.headers()
+        .get(header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let path = req.uri().path();
+    let host = req.headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    
+    tracing::info!(
+        difficulty = state.config.pow.difficulty,
+        client_ip = %client_ip,
+        x_forwarded_for = %x_forwarded_for,
+        x_real_ip = %x_real_ip,
+        user_agent = %user_agent,
+        accept_language = %accept_language,
+        path = %path,
+        host = %host,
+        "pow challenge (default)"
+    );
     build_challenge_response(
         &state,
         req.headers(),
