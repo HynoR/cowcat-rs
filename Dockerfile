@@ -80,4 +80,6 @@ USER appuser
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/cowcat-rs"]
+# 默认使用 /app/config.toml，如果文件不存在则使用默认配置
+# 用户可以通过环境变量覆盖所有配置，或通过 -v 挂载配置文件
 CMD ["--config", "/app/config.toml"]
