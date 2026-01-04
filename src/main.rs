@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let pow_routes = Router::new()
         .route("/", get(challenge_page))
         .route("/ok", get(health_ok))
-        .route("/assets/*path", get(serve_asset))
+        .route("/assets/{*path}", get(serve_asset))
         .route("/task", post(pow_task))
         .route("/verify", post(pow_verify))
         .layer(
