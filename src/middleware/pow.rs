@@ -45,7 +45,7 @@ pub async fn pow_gate(
             req.extensions(),
             redirect_target(&req),
             state.config.pow.difficulty,
-        );
+        ).await;
     }
 
     if let Some(cookie) = extract_cookie(req.headers()) {
@@ -79,7 +79,7 @@ pub async fn pow_gate(
                         req.extensions(),
                         redirect_target(&req),
                         effective,
-                    )
+                    ).await
                 }
             }
         };
@@ -119,7 +119,7 @@ pub async fn pow_gate(
         req.extensions(),
         redirect_target(&req),
         state.config.pow.difficulty,
-    )
+    ).await
 }
 
 fn evaluate_rules(state: &AppState, req: &Request<axum::body::Body>) -> Option<RuleDecision> {

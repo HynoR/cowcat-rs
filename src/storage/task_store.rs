@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::{interval, Duration};
 use time::OffsetDateTime;
 
 const TASK_CLEANUP_INTERVAL: u64 = 300;
@@ -122,47 +122,53 @@ impl TaskStore {
     }
 
     /// 插入新任务
-    pub fn insert(&self, task: Task) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.insert(task.task_id.0.clone(), task);
-        }
+    pub async fn insert(&self, task: Task) {
+        let mut guard = self.inner.lock().await;
+        guard.insert(task.task_id.0.clone(), task);
     }
 
     /// 消费任务：取出并移除，然后验证
     /// 无论验证成功与否，任务都被消耗（防重放）
-    pub fn consume_if<F>(&self, task_id: &str, validate: F) -> Result<Task, ConsumeError>
+    pub async fn consume_if<F>(&self, task_id: &str, validate: F) -> Result<Task, ConsumeError>
     where
         F: FnOnce(&Task) -> Result<(), ConsumeError>,
     {
-        let mut guard = self.inner.lock().map_err(|_| ConsumeError::NotFound)?;
-        
+        let mut guard = self.inner.lock().await;
+
         // 先移除任务（任务被消耗）
         let task = guard.remove(task_id).ok_or(ConsumeError::NotFound)?;
-        
+
         // 检查过期
         let now = OffsetDateTime::now_utc().unix_timestamp();
         if task.exp < now {
             return Err(ConsumeError::Expired);
         }
-        
+
         // 调用验证闭包
         validate(&task)?;
-        
+
         Ok(task)
     }
 
     fn spawn_cleanup(store: Arc<Self>) {
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(TASK_CLEANUP_INTERVAL));
-            store.cleanup();
+        tokio::spawn(async move {
+            let mut ticker = interval(Duration::from_secs(TASK_CLEANUP_INTERVAL));
+            loop {
+                ticker.tick().await;
+                store.cleanup().await;
+            }
         });
     }
 
-    fn cleanup(&self) {
-        let now = OffsetDateTime::now_utc().unix_timestamp();
-        tracing::debug!("cleaning up tasks");
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.retain(|_, task| task.exp >= now);
+    async fn cleanup(&self) {
+        let mut guard = self.inner.lock().await;
+        if guard.len() == 0 {
+            tracing::debug!("no tasks to cleanup");
+            return;
         }
+        tracing::debug!("cleaning up tasks start");
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        guard.retain(|_, task| task.exp >= now);
+        tracing::info!("cleaning up tasks done: {} remaining", guard.len());
     }
 }

@@ -36,7 +36,7 @@ pub async fn challenge_page(
     req: Request<axum::body::Body>,
 ) -> impl IntoResponse {
     let redirect = query.redirect.unwrap_or_else(|| "/".to_string());
-    build_challenge_response(&state, req.headers(), req.extensions(), &redirect, state.config.pow.difficulty)
+    build_challenge_response(&state, req.headers(), req.extensions(), &redirect, state.config.pow.difficulty).await
 }
 
 pub async fn pow_task(
@@ -75,7 +75,7 @@ pub async fn pow_task(
         "{}",
         MSG_POW_TASK_CREATED
     );
-    state.task_store.insert(task.clone());
+    state.task_store.insert(task.clone()).await;
 
     let resp = BinaryTaskResponse {
         task_id: task.task_id.0.clone(),
@@ -150,7 +150,7 @@ pub async fn pow_verify(
             return Err(ConsumeError::ValidationFailed(MSG_INVALID_PROOF_OF_WORK));
         }
         Ok(())
-    }) {
+    }).await {
         Ok(task) => task,
         Err(ConsumeError::NotFound) => {
             tracing::warn!(task_id = %TaskId(verify_req.task_id.clone()).short_id(), "{}", MSG_TASK_NOT_FOUND_OR_EXPIRED);
@@ -280,7 +280,7 @@ pub async fn health_ok() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
-pub fn build_challenge_response(
+pub async fn build_challenge_response(
     state: &AppState,
     headers: &HeaderMap,
     extensions: &axum::http::Extensions,
@@ -303,7 +303,7 @@ pub fn build_challenge_response(
         }
     };
 
-    state.task_store.insert(task.clone());
+    state.task_store.insert(task.clone()).await;
 
     let task_b64 = base64::engine::general_purpose::STANDARD.encode(task_frame);
     let rendered = render_template(
