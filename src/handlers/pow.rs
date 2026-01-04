@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
-use axum::http::{header, HeaderMap, Request, Response, StatusCode};
+use axum::http::{header, HeaderMap, Request, Response, StatusCode, Uri};
 use axum::response::IntoResponse;
 use base64::Engine;
 use http_body_util::BodyExt;
@@ -144,14 +144,17 @@ pub async fn pow_verify(
         return error_frame(StatusCode::BAD_REQUEST, "User agent mismatch");
     }
 
-    if state.config.pow.ip_policy != IpPolicy::None {
+    let client_ip = if state.config.pow.ip_policy != IpPolicy::None {
         let current_ip = crypto::extract_client_ip(&parts.headers, &parts.extensions, state.config.pow.ip_policy);
         let ip_hash = compute_ip_hash(&current_ip);
         if task.ip_hash != ip_hash {
             tracing::warn!(task_id = %task.task_id, "ip address mismatch");
             return error_frame(StatusCode::BAD_REQUEST, "IP address mismatch");
         }
-    }
+        current_ip
+    } else {
+        String::new()
+    };
 
     if !crypto::verify_pow(&task, &verify_req.nonce) {
         tracing::warn!(task_id = %task.task_id, "invalid proof of work");
@@ -190,8 +193,58 @@ pub async fn pow_verify(
     if let Ok(value) = header::HeaderValue::from_str(&set_cookie) {
         headers.insert(header::SET_COOKIE, value);
     }
-
-    tracing::info!(task_id = %task.task_id, redirect = %redirect, "pow verified");
+    // 收集和打印用户信息
+    let x_forwarded_for = parts.headers
+        .get(header::HeaderName::from_static("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let x_real_ip = parts.headers
+        .get(header::HeaderName::from_static("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let user_agent = headers_user_agent(&parts.headers);
+    let accept_language = parts.headers
+        .get(header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let path = parts.uri.path();
+    let host = headers_host(&parts.headers).unwrap_or_default();
+    
+    // 提取并格式化计算时间
+    let compute_time_formatted = extract_and_format_compute_time(&parts.uri);
+    
+    // 根据是否有计算时间，使用不同的日志格式
+    if let Some(time_str) = &compute_time_formatted {
+        tracing::info!(
+            task_id = %task.task_id,
+            redirect = %redirect,
+            client_ip = %client_ip,
+            x_forwarded_for = %x_forwarded_for,
+            x_real_ip = %x_real_ip,
+            user_agent = %user_agent,
+            accept_language = %accept_language,
+            path = %path,
+            host = %host,
+            compute_time = %time_str,
+            "pow verified"
+        );
+    } else {
+        tracing::info!(
+            task_id = %task.task_id,
+            redirect = %redirect,
+            client_ip = %client_ip,
+            x_forwarded_for = %x_forwarded_for,
+            x_real_ip = %x_real_ip,
+            user_agent = %user_agent,
+            accept_language = %accept_language,
+            path = %path,
+            host = %host,
+            "pow verified"
+        );
+    }
     let resp = BinaryVerifyResponse { redirect };
     let frame = protocol::frame::encode_frame(protocol::frame::FRAME_TYPE_VERIFY_RESPONSE, encode_verify_response(resp));
     (headers, frame).into_response()
@@ -325,6 +378,30 @@ fn headers_user_agent(headers: &HeaderMap) -> &str {
 
 fn headers_host(headers: &HeaderMap) -> Option<String> {
     headers.get(header::HOST).and_then(|v| v.to_str().ok()).map(|s| s.to_string())
+}
+
+fn extract_and_format_compute_time(uri: &Uri) -> Option<String> {
+    let query = uri.query()?;
+    for pair in query.split('&') {
+        if let Some((key, value)) = pair.split_once('=') {
+            if key == "compute_time" {
+                if let Ok(ms) = value.parse::<u64>() {
+                    return Some(format_compute_time(ms));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn format_compute_time(ms: u64) -> String {
+    let seconds = ms / 1000;
+    let milliseconds = ms % 1000;
+    if seconds > 0 {
+        format!("{}s {}ms", seconds, milliseconds)
+    } else {
+        format!("{}ms", milliseconds)
+    }
 }
 
 fn content_type_for(path: &str) -> &'static str {

@@ -28,5 +28,11 @@ build-linux:
 
 build-all: build-mac build-linux
 
+jsminify:
+	rm -rf static/assets/catpaw.min.js
+	rm -rf static/assets/catpaw.worker.min.js
+	bunx esbuild static/catpaw.js --minify --outfile=static/assets/catpaw.min.js
+	bunx esbuild static/catpaw.worker.js --minify --outfile=static/assets/catpaw.worker.min.js
+
 clean:
 	$(CARGO) clean
