@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
-use axum::http::{header, HeaderMap, Request, Response, StatusCode};
+use axum::http::{header, HeaderMap, Request, Response, StatusCode, Uri};
 use axum::response::IntoResponse;
 use base64::Engine;
 use http_body_util::BodyExt;
@@ -213,18 +213,38 @@ pub async fn pow_verify(
     let path = parts.uri.path();
     let host = headers_host(&parts.headers).unwrap_or_default();
     
-    tracing::info!(
-        task_id = %task.task_id,
-        redirect = %redirect,
-        client_ip = %client_ip,
-        x_forwarded_for = %x_forwarded_for,
-        x_real_ip = %x_real_ip,
-        user_agent = %user_agent,
-        accept_language = %accept_language,
-        path = %path,
-        host = %host,
-        "pow verified"
-    );
+    // 提取并格式化计算时间
+    let compute_time_formatted = extract_and_format_compute_time(&parts.uri);
+    
+    // 根据是否有计算时间，使用不同的日志格式
+    if let Some(time_str) = &compute_time_formatted {
+        tracing::info!(
+            task_id = %task.task_id,
+            redirect = %redirect,
+            client_ip = %client_ip,
+            x_forwarded_for = %x_forwarded_for,
+            x_real_ip = %x_real_ip,
+            user_agent = %user_agent,
+            accept_language = %accept_language,
+            path = %path,
+            host = %host,
+            compute_time = %time_str,
+            "pow verified"
+        );
+    } else {
+        tracing::info!(
+            task_id = %task.task_id,
+            redirect = %redirect,
+            client_ip = %client_ip,
+            x_forwarded_for = %x_forwarded_for,
+            x_real_ip = %x_real_ip,
+            user_agent = %user_agent,
+            accept_language = %accept_language,
+            path = %path,
+            host = %host,
+            "pow verified"
+        );
+    }
     let resp = BinaryVerifyResponse { redirect };
     let frame = protocol::frame::encode_frame(protocol::frame::FRAME_TYPE_VERIFY_RESPONSE, encode_verify_response(resp));
     (headers, frame).into_response()
@@ -358,6 +378,30 @@ fn headers_user_agent(headers: &HeaderMap) -> &str {
 
 fn headers_host(headers: &HeaderMap) -> Option<String> {
     headers.get(header::HOST).and_then(|v| v.to_str().ok()).map(|s| s.to_string())
+}
+
+fn extract_and_format_compute_time(uri: &Uri) -> Option<String> {
+    let query = uri.query()?;
+    for pair in query.split('&') {
+        if let Some((key, value)) = pair.split_once('=') {
+            if key == "compute_time" {
+                if let Ok(ms) = value.parse::<u64>() {
+                    return Some(format_compute_time(ms));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn format_compute_time(ms: u64) -> String {
+    let seconds = ms / 1000;
+    let milliseconds = ms % 1000;
+    if seconds > 0 {
+        format!("{}s {}ms", seconds, milliseconds)
+    } else {
+        format!("{}ms", milliseconds)
+    }
 }
 
 fn content_type_for(path: &str) -> &'static str {

@@ -436,6 +436,7 @@
 
     let computeStartTime = null;
     let computeProgressInterval = null;
+    let challengeStartTime = null;  // 记录挑战开始时间
 
     function startComputeProgress(reportAs) {
         computeStartTime = Date.now();
@@ -634,7 +635,13 @@
                 console.log('PoW verification proceeding (crypto.subtle not available for hash logging)');
             }
             const payload = await encodeVerifyRequest(taskId, nonce, redirect);
-            const response = await fetch('/__cowcatwaf/verify', {
+            // 计算从开始计算到发送验证的时间（毫秒）
+            let computeTimeParam = '';
+            if (challengeStartTime) {
+                const computeTimeMs = Date.now() - challengeStartTime;
+                computeTimeParam = '?compute_time=' + encodeURIComponent(computeTimeMs);
+            }
+            const response = await fetch('/__cowcatwaf/verify' + computeTimeParam, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/octet-stream',
@@ -752,6 +759,8 @@
             updateProgress(10, '任务获取成功');
             updateStatus('计算中...');
 
+            // 重置挑战开始时间
+            challengeStartTime = Date.now();
             const nonce = await solveChallenge(task);
             await verifyAndRedirect(task.task_id, nonce, redirect, task);
 
