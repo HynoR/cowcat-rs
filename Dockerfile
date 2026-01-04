@@ -5,7 +5,7 @@
 # ============================================
 FROM rust:latest AS chef
 
-RUN cargo install cargo-chef
+RUN cargo install cargo-chef --locked
 WORKDIR /app
 
 # ============================================
@@ -37,22 +37,26 @@ RUN rustup target add x86_64-unknown-linux-musl
 COPY --from=planner /app/recipe.json recipe.json
 
 # 构建依赖（这一层会被缓存，除非 Cargo.toml 或 Cargo.lock 改变）
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
+# 关键：cook 也要挂 /app/target cache，否则 build 看不到产物
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    CARGO_TARGET_DIR=/app/target \
     cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
 
 # 复制源代码
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY static ./static
+COPY config.toml.example ./config.toml.example
 
 # 构建应用
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    CARGO_TARGET_DIR=/app/target \
     cargo build --release --target x86_64-unknown-linux-musl && \
-    mkdir -p /app/build && \
-    cp /app/target/x86_64-unknown-linux-musl/release/cowcat-rs /app/build/cowcat-rs
+    install -Dm755 /app/target/x86_64-unknown-linux-musl/release/cowcat-rs /app/build/cowcat-rs
 
 # ============================================
 # 第四阶段：运行时镜像
@@ -76,4 +80,6 @@ USER appuser
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/cowcat-rs"]
+# 默认使用 /app/config.toml，如果文件不存在则使用默认配置
+# 用户可以通过环境变量覆盖所有配置，或通过 -v 挂载配置文件
 CMD ["--config", "/app/config.toml"]

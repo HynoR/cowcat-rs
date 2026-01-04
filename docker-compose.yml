@@ -6,7 +6,30 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # 日志级别
       RUST_LOG: info
-    volumes:
-      - ./config.toml:/app/config.toml:ro
+      
+      # 服务器配置（环境变量优先级最高，会覆盖配置文件）
+      # COWCAT_SERVER_LISTEN: "0.0.0.0:8080"
+      
+      # PoW 配置
+      # COWCAT_POW_DIFFICULTY: "3"
+      # COWCAT_POW_COOKIE_EXPIRE_HOURS: "24"
+      # COWCAT_POW_SALT: "your-salt-here"
+      # COWCAT_POW_WORKERS: "4"
+      # CATPOW_WORKER_TYPE: "wasm"  # 或 "native"
+      # COWCAT_POW_IP_POLICY: "none"  # 或 "enable" 或 "strict"
+      # COWCAT_POW_TEST_MODE: "false"
+      
+      # 代理配置
+      # COWCAT_PROXY_TARGET: "http://127.0.0.1:1234"
+    
+    # 方式一：纯环境变量配置（默认，不挂载配置文件）
+    # 程序会使用默认值，然后环境变量会覆盖默认值
+    
+    # 方式二：配置文件 + 环境变量覆盖（取消下面的注释）
+    # volumes:
+    #   - ./config.toml:/app/config.toml:ro
+    # 环境变量会覆盖配置文件中的对应值
+    
     restart: unless-stopped

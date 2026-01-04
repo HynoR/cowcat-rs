@@ -1,0 +1,11 @@
+target
+.git
+.github
+Dockerfile
+docker-compose.yml
+**/*.log
+*.md
+Makefile
+config.toml
+wasm
+

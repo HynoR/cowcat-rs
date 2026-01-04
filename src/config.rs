@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 
 use serde::Deserialize;
@@ -43,6 +44,7 @@ impl Config {
                 .map_err(|err| anyhow::anyhow!("failed to parse config {path}: {err}"))?
         };
         cfg.apply_defaults();
+        cfg.apply_env()?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -64,6 +66,97 @@ impl Config {
         if self.pow.worker_type.trim().is_empty() {
             self.pow.worker_type = defaults.pow.worker_type;
         }
+    }
+
+    fn apply_env(&mut self) -> anyhow::Result<()> {
+        // Server config
+        if let Ok(v) = env::var("COWCAT_SERVER_LISTEN") {
+            let trimmed = v.trim().to_string();
+            if !trimmed.is_empty() {
+                self.server.listen = trimmed;
+            }
+        }
+
+        // Pow config
+        if let Ok(v) = env::var("COWCAT_POW_DIFFICULTY") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                let n = trimmed.parse::<i32>().map_err(|err| {
+                    anyhow::anyhow!("环境变量 COWCAT_POW_DIFFICULTY 格式错误: {err}")
+                })?;
+                self.pow.difficulty = n;
+            }
+        }
+
+        if let Ok(v) = env::var("COWCAT_POW_COOKIE_EXPIRE_HOURS") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                let n = trimmed.parse::<i64>().map_err(|err| {
+                    anyhow::anyhow!("环境变量 COWCAT_POW_COOKIE_EXPIRE_HOURS 格式错误: {err}")
+                })?;
+                self.pow.cookie_expire_hours = n;
+            }
+        }
+
+        if let Ok(v) = env::var("COWCAT_POW_SALT") {
+            let trimmed = v.trim().to_string();
+            if !trimmed.is_empty() {
+                self.pow.salt = trimmed;
+            }
+        }
+
+        if let Ok(v) = env::var("COWCAT_POW_WORKERS") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                let n = trimmed.parse::<i32>().map_err(|err| {
+                    anyhow::anyhow!("环境变量 COWCAT_POW_WORKERS 格式错误: {err}")
+                })?;
+                self.pow.workers = n;
+            }
+        }
+
+        if let Ok(v) = env::var("CATPOW_WORKER_TYPE") {
+            let trimmed = v.trim().to_lowercase();
+            if !trimmed.is_empty() {
+                self.pow.worker_type = trimmed;
+            }
+        }
+
+        if let Ok(v) = env::var("COWCAT_POW_IP_POLICY") {
+            let trimmed = v.trim().to_lowercase();
+            if !trimmed.is_empty() {
+                self.pow.ip_policy = match trimmed.as_str() {
+                    "none" => IpPolicy::None,
+                    "enable" => IpPolicy::Enable,
+                    "strict" => IpPolicy::Strict,
+                    _ => {
+                        return Err(anyhow::anyhow!(
+                            "环境变量 COWCAT_POW_IP_POLICY 值无效: {trimmed}，必须是 none/enable/strict"
+                        ));
+                    }
+                };
+            }
+        }
+
+        if let Ok(v) = env::var("COWCAT_POW_TEST_MODE") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                let b = trimmed.parse::<bool>().map_err(|err| {
+                    anyhow::anyhow!("环境变量 COWCAT_POW_TEST_MODE 格式错误: {err}")
+                })?;
+                self.pow.test_mode = b;
+            }
+        }
+
+        // Proxy config
+        if let Ok(v) = env::var("COWCAT_PROXY_TARGET") {
+            let trimmed = v.trim().to_string();
+            if !trimmed.is_empty() {
+                self.proxy.target = trimmed;
+            }
+        }
+
+        Ok(())
     }
 
     fn validate(&self) -> anyhow::Result<()> {
