@@ -2,10 +2,8 @@ name: Publish Docker image (Release)
 
 on:
   push:
-    branches:
-      - main
     tags:
-      - "*"
+      - '*.*.*'
   workflow_dispatch: {}
 
 permissions:
