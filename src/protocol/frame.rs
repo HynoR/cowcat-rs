@@ -157,13 +157,13 @@ pub fn encode_task_response_frame(
     worker_type: &str,
 ) -> anyhow::Result<Vec<u8>> {
     let resp = BinaryTaskResponse {
-        task_id: task.task_id.clone(),
-        seed: task.seed.clone(),
-        bits: task.bits,
+        task_id: task.task_id.0.clone(),
+        seed: task.seed.0.clone(),
+        bits: task.bits as i32,
         exp: task.exp,
-        scope: task.scope.clone(),
-        ua_hash: task.ua_hash.clone(),
-        ip_hash: task.ip_hash.clone(),
+        scope: task.scope.0.clone(),
+        ua_hash: task.ua_hash.0.clone(),
+        ip_hash: task.ip_hash.0.clone(),
         workers,
         worker_type: worker_type.to_string(),
     };

@@ -296,6 +296,7 @@ dependencies = [
  "anyhow",
  "axum",
  "base64",
+ "bytes",
  "clap",
  "cookie",
  "hex",

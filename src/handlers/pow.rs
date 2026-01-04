@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 
 use crate::config::IpPolicy;
 use crate::crypto::{compute_ip_hash, compute_ua_hash, generate_cookie};
+use crate::handlers::message::*;
 use crate::protocol::frame::{
     decode_frame, decode_task_request, decode_verify_request, encode_error_frame,
     encode_task_response, encode_verify_response, deobfuscate_frame, BinaryTaskResponse,
@@ -17,8 +18,9 @@ use crate::protocol::frame::{
 };
 use crate::rules::clamp_difficulty;
 use crate::state::AppState;
-use crate::storage::Task;
+use crate::storage::{ConsumeError, IpHash, Scope, Seed, Task, TaskId, UaHash};
 use crate::{crypto, protocol};
+use crate::ip_source::ip::resolve_request_ip;
 
 pub const POW_PREFIX: &str = "/__cowcatwaf";
 pub const POW_COOKIE_NAME: &str = "cowcat.waf.token";
@@ -44,44 +46,45 @@ pub async fn pow_task(
     let (parts, body) = req.into_parts();
     let body = match body.collect().await {
         Ok(collected) => collected.to_bytes(),
-        Err(_) => return error_frame(StatusCode::BAD_REQUEST, "Invalid request"),
+        Err(_) => return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST),
     };
     if !body.is_empty() {
         let (frame_type, payload) = match decode_frame(&body) {
             Ok(res) => res,
-            Err(_) => return error_frame(StatusCode::BAD_REQUEST, "Invalid request"),
+            Err(_) => return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST),
         };
         if frame_type != FRAME_TYPE_TASK_REQUEST {
-            return error_frame(StatusCode::BAD_REQUEST, "Invalid request");
+            return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST);
         }
         if decode_task_request(payload).is_err() {
-            return error_frame(StatusCode::BAD_REQUEST, "Invalid request");
+            return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST);
         }
     }
 
     let task = match build_task(&state, &parts.headers, &parts.extensions, state.config.pow.difficulty) {
         Ok(task) => task,
         Err(err) => {
-            tracing::error!(error = %err, "failed to build task");
-            return error_frame(StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate task");
+            tracing::error!(error = %err, "{}", MSG_FAILED_TO_GENERATE_TASK);
+            return error_frame(StatusCode::INTERNAL_SERVER_ERROR, MSG_FAILED_TO_GENERATE_TASK);
         }
     };
     tracing::debug!(
-        task_id = %task.task_id,
+        task_id = %task.task_id.short_id(),
         bits = task.bits,
         scope = %task.scope,
-        "pow task created"
+        "{}",
+        MSG_POW_TASK_CREATED
     );
-    state.task_store.set(task.clone());
+    state.task_store.insert(task.clone());
 
     let resp = BinaryTaskResponse {
-        task_id: task.task_id.clone(),
-        seed: task.seed.clone(),
-        bits: task.bits,
+        task_id: task.task_id.0.clone(),
+        seed: task.seed.0.clone(),
+        bits: task.bits as i32,
         exp: task.exp,
-        scope: task.scope.clone(),
-        ua_hash: task.ua_hash.clone(),
-        ip_hash: task.ip_hash.clone(),
+        scope: task.scope.0.clone(),
+        ua_hash: task.ua_hash.0.clone(),
+        ip_hash: task.ip_hash.0.clone(),
         workers: state.config.pow.workers,
         worker_type: state.config.pow.worker_type.clone(),
     };
@@ -100,76 +103,75 @@ pub async fn pow_verify(
     let (parts, body) = req.into_parts();
     let body = match body.collect().await {
         Ok(collected) => collected.to_bytes(),
-        Err(_) => return error_frame(StatusCode::BAD_REQUEST, "Invalid request"),
+        Err(_) => return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST),
     };
     if body.is_empty() {
-        return error_frame(StatusCode::BAD_REQUEST, "Invalid request");
+        return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST);
     }
 
     let mut deobfuscated = body.to_vec();
     deobfuscate_frame(&mut deobfuscated, XOR_KEY);
     let (frame_type, payload) = match decode_frame(&deobfuscated) {
         Ok(res) => res,
-        Err(_) => return error_frame(StatusCode::BAD_REQUEST, "Invalid request"),
+        Err(_) => return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST),
     };
     if frame_type != FRAME_TYPE_VERIFY_REQUEST {
-        return error_frame(StatusCode::BAD_REQUEST, "Invalid request");
+        return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST);
     }
 
     let verify_req = match decode_verify_request(payload) {
         Ok(req) => req,
-        Err(_) => return error_frame(StatusCode::BAD_REQUEST, "Invalid request"),
+        Err(_) => return error_frame(StatusCode::BAD_REQUEST, MSG_INVALID_REQUEST),
     };
-
-    let task = match state.task_store.get(&verify_req.task_id) {
-        Some(task) => task,
-        None => {
-            tracing::warn!(task_id = %verify_req.task_id, "task not found or expired");
-            return error_frame(StatusCode::BAD_REQUEST, "Task not found or expired");
-        }
-    };
-
-    if task.used {
-        tracing::warn!(task_id = %task.task_id, "task already used");
-        return error_frame(StatusCode::BAD_REQUEST, "Task already used");
-    }
-    if task.exp < OffsetDateTime::now_utc().unix_timestamp() {
-        tracing::warn!(task_id = %task.task_id, "task expired");
-        return error_frame(StatusCode::BAD_REQUEST, "Task expired");
-    }
 
     let ua_hash = compute_ua_hash(headers_user_agent(&parts.headers));
-    if task.ua_hash != ua_hash {
-        tracing::warn!(task_id = %task.task_id, "user agent mismatch");
-        return error_frame(StatusCode::BAD_REQUEST, "User agent mismatch");
-    }
-
-    let client_ip = if state.config.pow.ip_policy != IpPolicy::None {
-        let current_ip = crypto::extract_client_ip(&parts.headers, &parts.extensions, state.config.pow.ip_policy);
-        let ip_hash = compute_ip_hash(&current_ip);
-        if task.ip_hash != ip_hash {
-            tracing::warn!(task_id = %task.task_id, "ip address mismatch");
-            return error_frame(StatusCode::BAD_REQUEST, "IP address mismatch");
-        }
-        current_ip
+    let ip_for_verify = if state.config.pow.ip_policy != IpPolicy::None {
+        crypto::extract_client_ip(&parts.headers, &parts.extensions, state.config.pow.ip_policy)
+    } else {
+        String::new()
+    };
+    let ip_hash = if state.config.pow.ip_policy != IpPolicy::None {
+        compute_ip_hash(&ip_for_verify)
     } else {
         String::new()
     };
 
-    if !crypto::verify_pow(&task, &verify_req.nonce) {
-        tracing::warn!(task_id = %task.task_id, "invalid proof of work");
-        return error_frame(StatusCode::BAD_REQUEST, "Invalid proof of work");
-    }
-
-    state.task_store.mark_used(&task.task_id);
+    let task = match state.task_store.consume_if(&verify_req.task_id, |task| {
+        if task.ua_hash.0 != ua_hash {
+            tracing::warn!(task_id = %task.task_id.short_id(), "{}", MSG_USER_AGENT_MISMATCH);
+            return Err(ConsumeError::ValidationFailed(MSG_USER_AGENT_MISMATCH));
+        }
+        if state.config.pow.ip_policy != IpPolicy::None && task.ip_hash.0 != ip_hash {
+            tracing::warn!(task_id = %task.task_id.short_id(), "{}", MSG_IP_ADDRESS_MISMATCH);
+            return Err(ConsumeError::ValidationFailed(MSG_IP_ADDRESS_MISMATCH));
+        }
+        if !crypto::verify_pow(task, &verify_req.nonce) {
+            tracing::warn!(task_id = %task.task_id.short_id(), "{}", MSG_INVALID_PROOF_OF_WORK);
+            return Err(ConsumeError::ValidationFailed(MSG_INVALID_PROOF_OF_WORK));
+        }
+        Ok(())
+    }) {
+        Ok(task) => task,
+        Err(ConsumeError::NotFound) => {
+            tracing::warn!(task_id = %TaskId(verify_req.task_id.clone()).short_id(), "{}", MSG_TASK_NOT_FOUND_OR_EXPIRED);
+            return error_frame(StatusCode::BAD_REQUEST, MSG_TASK_NOT_FOUND_OR_EXPIRED);
+        }
+        Err(ConsumeError::Expired) => {
+            tracing::warn!(task_id = %TaskId(verify_req.task_id.clone()).short_id(), "{}", MSG_TASK_EXPIRED);
+            return error_frame(StatusCode::BAD_REQUEST, MSG_TASK_EXPIRED);
+        }
+        Err(ConsumeError::ValidationFailed(msg)) => {
+            return error_frame(StatusCode::BAD_REQUEST, msg);
+        }
+    };
 
     let expire_seconds = state.config.pow.cookie_expire_hours * 3600;
     let cookie_value = generate_cookie(
         &state.server_secret,
-        task.bits,
-        &task.scope,
-        &task.ua_hash,
-        &task.ip_hash,
+        task.bits as i32,
+        &task.scope.0,
+        &task.ua_hash.0,
+        &task.ip_hash.0,
         &verify_req.nonce,
         expire_seconds,
     );
@@ -184,26 +186,28 @@ pub async fn pow_verify(
 
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/octet-stream"));
-    let set_cookie = cookie::Cookie::build((POW_COOKIE_NAME, cookie_value))
-        .path("/")
-        .http_only(true)
-        .max_age(time::Duration::seconds(expire_seconds))
-        .build()
-        .to_string();
+    let set_cookie = if state.config.pow.secure {
+        cookie::Cookie::build((POW_COOKIE_NAME, cookie_value))
+            .path("/")
+            .http_only(true)
+            .secure(true)
+            .same_site(cookie::SameSite::None)
+            .max_age(time::Duration::seconds(expire_seconds))
+            .build()
+            .to_string()
+    } else {
+        cookie::Cookie::build((POW_COOKIE_NAME, cookie_value))
+            .path("/")
+            .http_only(true)
+            .max_age(time::Duration::seconds(expire_seconds))
+            .build()
+            .to_string()
+    };
+    
     if let Ok(value) = header::HeaderValue::from_str(&set_cookie) {
         headers.insert(header::SET_COOKIE, value);
     }
     // 收集和打印用户信息
-    let x_forwarded_for = parts.headers
-        .get(header::HeaderName::from_static("x-forwarded-for"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-    let x_real_ip = parts.headers
-        .get(header::HeaderName::from_static("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
     let user_agent = headers_user_agent(&parts.headers);
     let accept_language = parts.headers
         .get(header::ACCEPT_LANGUAGE)
@@ -214,41 +218,41 @@ pub async fn pow_verify(
     let host = headers_host(&parts.headers).unwrap_or_default();
     
     // 提取并格式化计算时间
-    let compute_time_formatted = extract_and_format_compute_time(&parts.uri);
+    let elapsed = extract_and_format_compute_time(&parts.uri);
+
+    let final_ip = resolve_request_ip(&parts.headers, &parts.extensions);
     
     // 根据是否有计算时间，使用不同的日志格式
-    if let Some(time_str) = &compute_time_formatted {
+    if let Some(time_str) = &elapsed {
         tracing::info!(
-            task_id = %task.task_id,
-            redirect = %redirect,
-            client_ip = %client_ip,
-            x_forwarded_for = %x_forwarded_for,
-            x_real_ip = %x_real_ip,
-            user_agent = %user_agent,
+            task_id = %task.task_id.short_id(),
+            client_ip = %final_ip.0,
+            ip_source = %final_ip.1.get_string(),
             accept_language = %accept_language,
             path = %path,
             host = %host,
-            compute_time = %time_str,
-            "pow verified"
+            elapsed = %time_str,
+            "{}",
+            MSG_POW_VERIFIED
         );
     } else {
         tracing::info!(
-            task_id = %task.task_id,
-            redirect = %redirect,
-            client_ip = %client_ip,
-            x_forwarded_for = %x_forwarded_for,
-            x_real_ip = %x_real_ip,
+            task_id = %task.task_id.short_id(),
+            client_ip = %final_ip.0,
+            ip_source = %final_ip.1.get_string(),
             user_agent = %user_agent,
             accept_language = %accept_language,
             path = %path,
             host = %host,
-            "pow verified"
+            "{}",
+            MSG_POW_VERIFIED
         );
     }
     let resp = BinaryVerifyResponse { redirect };
     let frame = protocol::frame::encode_frame(protocol::frame::FRAME_TYPE_VERIFY_RESPONSE, encode_verify_response(resp));
     (headers, frame).into_response()
 }
+
 
 pub async fn serve_asset(
     State(_state): State<Arc<AppState>>,
@@ -286,7 +290,7 @@ pub fn build_challenge_response(
     let task = match build_task(state, headers, extensions, difficulty) {
         Ok(task) => task,
         Err(err) => {
-            tracing::error!(error = %err, "failed to build task");
+            tracing::error!(error = %err, "{}", MSG_FAILED_TO_GENERATE_TASK);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -294,12 +298,12 @@ pub fn build_challenge_response(
     let task_frame = match protocol::frame::encode_task_response_frame(&task, state.config.pow.workers, &state.config.pow.worker_type) {
         Ok(frame) => frame,
         Err(err) => {
-            tracing::error!(error = %err, "failed to encode task response frame");
+            tracing::error!(error = %err, "{}", MSG_FAILED_TO_ENCODE_TASK_RESPONSE_FRAME);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
-    state.task_store.set(task.clone());
+    state.task_store.insert(task.clone());
 
     let task_b64 = base64::engine::general_purpose::STANDARD.encode(task_frame);
     let rendered = render_template(
@@ -340,25 +344,31 @@ fn build_task(
     difficulty: i32,
 ) -> anyhow::Result<Task> {
     let ua_hash = compute_ua_hash(headers_user_agent(headers));
-    let ip = crypto::extract_client_ip(headers, extensions, state.config.pow.ip_policy);
-    let ip_hash = compute_ip_hash(&ip);
+    let ip_for_verify = if state.config.pow.ip_policy != IpPolicy::None {
+        crypto::extract_client_ip(headers, extensions, state.config.pow.ip_policy)
+    } else {
+        String::new()
+    };
+    let ip_hash = if state.config.pow.ip_policy != IpPolicy::None {
+        compute_ip_hash(&ip_for_verify)
+    } else {
+        String::new()
+    };
 
     let task_id = crypto::generate_random_id()?;
     let seed = crypto::generate_random_seed()?;
-    let bits = clamp_difficulty(difficulty) * 4;
+    let bits = (clamp_difficulty(difficulty) * 4) as u32;
     let exp = OffsetDateTime::now_utc().unix_timestamp() + 120;
     let scope = headers_host(headers).unwrap_or_else(|| "unknown".to_string());
 
     Ok(Task {
-        task_id,
-        seed,
+        task_id: TaskId(task_id),
+        seed: Seed(seed),
         bits,
         exp,
-        scope,
-        ua_hash,
-        ip_hash,
-        used: false,
-        created_at: std::time::Instant::now(),
+        scope: Scope(scope),
+        ua_hash: UaHash(ua_hash),
+        ip_hash: IpHash(ip_hash),
     })
 }
 
@@ -395,13 +405,10 @@ fn extract_and_format_compute_time(uri: &Uri) -> Option<String> {
 }
 
 fn format_compute_time(ms: u64) -> String {
-    let seconds = ms / 1000;
-    let milliseconds = ms % 1000;
-    if seconds > 0 {
-        format!("{}s {}ms", seconds, milliseconds)
-    } else {
-        format!("{}ms", milliseconds)
+    if ms<1000 {
+        return format!("{}ms", ms);
     }
+    format!("{:.2}s", ms as f64 / 1000.0)
 }
 
 fn content_type_for(path: &str) -> &'static str {
@@ -441,7 +448,6 @@ fn cache_control_for(path: &str) -> &'static str {
         || path.contains("catpaw.js")
         || path.contains("catpaw.min.js")
         || path.contains("catpaw.worker.min.js")
-        || path.contains("cowcat-embed.js")
         || path.contains("catpaw.html")
         || path.contains("catpaw.wasm")
     {

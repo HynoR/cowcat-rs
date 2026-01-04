@@ -47,10 +47,10 @@ pub fn extract_client_ip(headers: &HeaderMap, extensions: &Extensions, policy: I
     match policy {
         IpPolicy::None => String::new(),
         IpPolicy::Enable => {
-            if let Some(ip) = header_ip(headers, header::HeaderName::from_static("x-forwarded-for")) {
+            if let Some(ip) = header_ip(headers, header::HeaderName::from_static("x-real-ip")) {
                 return ip;
             }
-            if let Some(ip) = header_ip(headers, header::HeaderName::from_static("x-real-ip")) {
+            if let Some(ip) = header_ip(headers, header::HeaderName::from_static("x-forwarded-for")) {
                 return ip;
             }
             remote_ip(extensions).unwrap_or_default()

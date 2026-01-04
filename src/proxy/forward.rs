@@ -43,7 +43,7 @@ pub async fn proxy_handler(
             Response::from_parts(parts, Body::new(body))
         }
         Err(err) => {
-            tracing::error!(error = %err, "proxy request failed");
+            tracing::debug!(error = %err, "proxy request failed");
             StatusCode::BAD_GATEWAY.into_response()
         }
     }

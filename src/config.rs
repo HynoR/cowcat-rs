@@ -174,7 +174,12 @@ impl Config {
     }
 
     pub fn print_config(&self) {
-        tracing::info!("config: {:?}", self);
+        tracing::info!("SERVER config: {:?}", self.server);
+        tracing::info!("POW config: {:?}", self.pow);
+        tracing::info!("PROXY config: {:?}", self.proxy);
+        if self.rules.enabled {
+            tracing::info!("RULES config: {} rules , default action: {:?}", self.rules.get_rule_len(), self.rules.default_action);
+        }
     }
 }
 
@@ -202,6 +207,7 @@ pub struct PowConfig {
     pub worker_type: String,
     pub ip_policy: IpPolicy,
     pub test_mode: bool,
+    pub secure: bool,
 }
 
 impl Default for PowConfig {
@@ -214,6 +220,7 @@ impl Default for PowConfig {
             worker_type: "wasm".to_string(),
             ip_policy: IpPolicy::None,
             test_mode: false,
+            secure: true,
         }
     }
 }
@@ -261,6 +268,12 @@ impl Default for RulesConfig {
             default_action: RuleAction::Challenge,
             rule: Vec::new(),
         }
+    }
+}
+
+impl RulesConfig {
+    pub fn get_rule_len(&self) -> usize {
+        self.rule.len()
     }
 }
 

@@ -1,5 +1,8 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use axum::http::{HeaderMap, StatusCode};
+use bytes::Bytes;
 use ring::rand::{SecureRandom, SystemRandom};
 
 use crate::config::Config;
@@ -10,6 +13,20 @@ use hyper_util::rt::TokioExecutor;
 
 use crate::storage::TaskStore;
 
+#[derive(Clone)]
+pub struct FaviconCache {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    pub body: Bytes,
+    pub cached_at: Instant,
+}
+
+impl FaviconCache {
+    pub fn is_valid(&self) -> bool {
+        self.cached_at.elapsed() < Duration::from_secs(3600) // 1 hour
+    }
+}
+
 pub struct AppState {
     pub config: Config,
     pub rules: RulesEngine,
@@ -19,6 +36,7 @@ pub struct AppState {
     pub cowcat_image1: String,
     pub cowcat_image2: String,
     pub proxy_client: Client<HttpConnector, axum::body::Body>,
+    pub favicon_cache: Arc<tokio::sync::RwLock<Option<FaviconCache>>>,
 }
 
 impl AppState {
@@ -40,6 +58,7 @@ impl AppState {
             cowcat_image1,
             cowcat_image2,
             proxy_client,
+            favicon_cache: Arc::new(tokio::sync::RwLock::new(None)),
         })
     }
 }
@@ -47,12 +66,14 @@ impl AppState {
 fn build_server_secret(salt: &str) -> anyhow::Result<String> {
     let trimmed = salt.trim();
     if !trimmed.is_empty() {
+        tracing::info!("secret(config): {}", trimmed);
         return Ok(pad_secret(trimmed, 32));
     }
     let rng = SystemRandom::new();
     let mut buf = vec![0u8; 16];
     rng.fill(&mut buf).map_err(|_| anyhow::anyhow!("failed to generate secret"))?;
     let encoded = hex::encode(buf);
+    tracing::info!("secret(generated): {}", encoded);
     Ok(pad_secret(&encoded, 32))
 }
 
