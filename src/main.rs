@@ -60,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(
             CompressionLayer::new()
                 .br(true)
+                .gzip(true)
                 .compress_when(
                     DefaultPredicate::new()
                         .and(NotForContentType::const_new("application/octet-stream")),

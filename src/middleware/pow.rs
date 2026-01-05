@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
-use axum::http::{header, Request, StatusCode};
+use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use http_body_util::BodyExt;
+use std::io::Write;
 
 use crate::config::IpPolicy;
 use crate::crypto::{compute_ip_hash, compute_ua_hash};
@@ -39,13 +43,14 @@ pub async fn pow_gate(
 
     if state.config.pow.test_mode {
         tracing::info!("pow test mode enabled: forcing challenge");
-        return build_challenge_response(
+        let resp = build_challenge_response(
             &state,
             req.headers(),
             req.extensions(),
             redirect_target(&req),
             state.config.pow.difficulty,
         ).await;
+        return maybe_gzip_challenge_response(req.headers(), resp).await;
     }
 
     if let Some(cookie) = extract_cookie(req.headers()) {
@@ -73,13 +78,15 @@ pub async fn pow_gate(
                 if effective == 0 {
                     next.run(req).await
                 } else {
-                    build_challenge_response(
+                    let resp = build_challenge_response(
                         &state,
                         req.headers(),
                         req.extensions(),
                         redirect_target(&req),
                         effective,
-                    ).await
+                    )
+                    .await;
+                    return maybe_gzip_challenge_response(req.headers(), resp).await;
                 }
             }
         };
@@ -113,13 +120,15 @@ pub async fn pow_gate(
         host = %host,
         "pow challenge (default)"
     );
-    build_challenge_response(
+    let resp = build_challenge_response(
         &state,
         req.headers(),
         req.extensions(),
         redirect_target(&req),
         state.config.pow.difficulty,
-    ).await
+    )
+    .await;
+    maybe_gzip_challenge_response(req.headers(), resp).await
 }
 
 fn evaluate_rules(state: &AppState, req: &Request<axum::body::Body>) -> Option<RuleDecision> {
@@ -215,4 +224,83 @@ fn verify_cookie(state: &AppState, req: &Request<axum::body::Body>, value: &str)
         }
     }
     true
+}
+
+async fn maybe_gzip_challenge_response(headers: &HeaderMap, response: Response) -> Response {
+    if !accepts_gzip(headers) {
+        return response;
+    }
+    if response.headers().contains_key(header::CONTENT_ENCODING) {
+        return response;
+    }
+
+    let (mut parts, body) = response.into_parts();
+    let collected = match body.collect().await {
+        Ok(collected) => collected,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to collect challenge response body");
+            return Response::from_parts(parts, axum::body::Body::empty());
+        }
+    };
+    let bytes = collected.to_bytes();
+
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    if let Err(err) = encoder.write_all(&bytes) {
+        tracing::warn!(error = %err, "failed to gzip challenge response body");
+        return Response::from_parts(parts, axum::body::Body::empty());
+    }
+    let compressed = match encoder.finish() {
+        Ok(data) => data,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to finish gzip challenge response body");
+            return Response::from_parts(parts, axum::body::Body::empty());
+        }
+    };
+
+    parts.headers.insert(header::CONTENT_ENCODING, header::HeaderValue::from_static("gzip"));
+    parts.headers.append(header::VARY, header::HeaderValue::from_static("Accept-Encoding"));
+    parts.headers.insert(
+        header::CONTENT_LENGTH,
+        header::HeaderValue::from_str(&compressed.len().to_string()).unwrap_or_else(|_| header::HeaderValue::from_static("0")),
+    );
+
+    Response::from_parts(parts, axum::body::Body::from(compressed))
+}
+
+fn accepts_gzip(headers: &HeaderMap) -> bool {
+    let raw = match headers.get(header::ACCEPT_ENCODING).and_then(|v| v.to_str().ok()) {
+        Some(value) => value,
+        None => return false,
+    };
+
+    let mut gzip_q = None;
+    let mut star_q = None;
+
+    for part in raw.split(',') {
+        let mut iter = part.trim().split(';');
+        let encoding = iter.next().unwrap_or("").trim();
+        let mut q_value = 1.0f32;
+        for param in iter {
+            let param = param.trim();
+            if let Some(value) = param.strip_prefix("q=") {
+                if let Ok(parsed) = value.parse::<f32>() {
+                    q_value = parsed;
+                }
+            }
+        }
+
+        if encoding.eq_ignore_ascii_case("gzip") {
+            gzip_q = Some(q_value);
+        } else if encoding == "*" {
+            star_q = Some(q_value);
+        }
+    }
+
+    if let Some(q) = gzip_q {
+        q > 0.0
+    } else if let Some(q) = star_q {
+        q > 0.0
+    } else {
+        false
+    }
 }
