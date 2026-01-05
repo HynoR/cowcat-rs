@@ -1,6 +1,9 @@
+use std::net::IpAddr;
 use std::sync::Arc;
 
-use axum::http::{header, HeaderMap, Request, StatusCode};
+use axum::body::Body;
+use axum::extract::{Request, State};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use flate2::write::GzEncoder;
@@ -16,8 +19,8 @@ use crate::rules::{RuleAction, RuleDecision};
 use crate::state::AppState;
 
 pub async fn pow_gate(
-    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    req: Request<axum::body::Body>,
+    State(state): State<Arc<AppState>>,
+    req: Request,
     next: Next,
 ) -> Response {
     tracing::debug!(method = %req.method(), path = %req.uri().path(), "pow gate check");
@@ -61,7 +64,12 @@ pub async fn pow_gate(
         tracing::debug!("pow cookie invalid");
     }
 
-    if let Some(decision) = evaluate_rules(&state, &req) {
+    // 提前提取规则匹配所需的数据，为后续 async 规则匹配做准备
+    let (client_ip_str, ip_source) = resolve_request_ip(req.headers(), req.extensions());
+    let client_ip = crate::crypto::parse_ip(&client_ip_str);
+    let path = req.uri().path();
+    
+    if let Some(decision) = evaluate_rules(&state, path, req.headers(), client_ip) {
         return match decision.action {
             RuleAction::Allow => {
                 tracing::info!("rule decision: allow");
@@ -92,28 +100,14 @@ pub async fn pow_gate(
         };
     }
 
-    // 收集和打印用户信息
-    let final_ip = resolve_request_ip(req.headers(), req.extensions());
-    let user_agent = req.headers()
-        .get(header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    let accept_language = req.headers()
-        .get(header::ACCEPT_LANGUAGE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-    let path = req.uri().path();
-    let host = req.headers()
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+    let user_agent = get_str_from_header(req.headers(), "User-Agent");
+    let accept_language = get_str_from_header(req.headers(), "Accept-Language");
+    let host = get_str_from_header(req.headers(), "Host");
 
     tracing::info!(
         difficulty = state.config.pow.difficulty,
-        client_ip = %final_ip.0,
-        ip_source = %final_ip.1.get_string(),
+        client_ip = %client_ip_str,
+        ip_source = %ip_source.get_string(),
         user_agent = %user_agent,
         accept_language = %accept_language,
         path = %path,
@@ -131,19 +125,26 @@ pub async fn pow_gate(
     maybe_gzip_challenge_response(req.headers(), resp).await
 }
 
-fn evaluate_rules(state: &AppState, req: &Request<axum::body::Body>) -> Option<RuleDecision> {
-    let (ip, _) = resolve_request_ip(req.headers(), req.extensions());
-    let ip_addr = crate::crypto::parse_ip(&ip);
-    state.rules.evaluate(req.uri().path(), req.headers(), ip_addr)
+fn get_str_from_header(headers: &HeaderMap, name: &str) -> String {
+    headers.get(name).and_then(|v| v.to_str().ok()).map(|s| s.to_string()).unwrap_or_default()
+}
+
+fn evaluate_rules(
+    state: &AppState,
+    path: &str,
+    headers: &HeaderMap,
+    client_ip: Option<IpAddr>,
+) -> Option<RuleDecision> {
+    state.rules.evaluate(path, headers, client_ip)
 }
 
 fn is_pow_path(path: &str) -> bool {
     path.starts_with(POW_PREFIX)
 }
 
-fn is_service_worker_request(req: &Request<axum::body::Body>) -> bool {
+fn is_service_worker_request(req: &Request) -> bool {
     let method = req.method();
-    if method != axum::http::Method::GET && method != axum::http::Method::HEAD {
+    if method != Method::GET && method != Method::HEAD {
         return false;
     }
     let dest = req
@@ -167,14 +168,14 @@ fn is_service_worker_request(req: &Request<axum::body::Body>) -> bool {
     path.ends_with(".js") || path.ends_with(".mjs")
 }
 
-fn redirect_target(req: &Request<axum::body::Body>) -> &str {
+fn redirect_target(req: &Request) -> &str {
     req.uri()
         .path_and_query()
         .map(|p| p.as_str())
         .unwrap_or_else(|| req.uri().path())
 }
 
-fn extract_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
+fn extract_cookie(headers: &HeaderMap) -> Option<String> {
     let raw = headers.get(header::COOKIE)?.to_str().ok()?;
     for cookie in cookie::Cookie::split_parse(raw).flatten() {
         if cookie.name() == POW_COOKIE_NAME {
@@ -184,7 +185,7 @@ fn extract_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
     None
 }
 
-fn verify_cookie(state: &AppState, req: &Request<axum::body::Body>, value: &str) -> bool {
+fn verify_cookie(state: &AppState, req: &Request, value: &str) -> bool {
     tracing::debug!("verifying pow cookie: {}", value);
     let payload = match crate::crypto::verify_cookie(&state.server_secret, value) {
         Some(payload) => payload,
@@ -239,7 +240,7 @@ async fn maybe_gzip_challenge_response(headers: &HeaderMap, response: Response) 
         Ok(collected) => collected,
         Err(err) => {
             tracing::warn!(error = %err, "failed to collect challenge response body");
-            return Response::from_parts(parts, axum::body::Body::empty());
+            return Response::from_parts(parts, Body::empty());
         }
     };
     let bytes = collected.to_bytes();
@@ -247,24 +248,24 @@ async fn maybe_gzip_challenge_response(headers: &HeaderMap, response: Response) 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
     if let Err(err) = encoder.write_all(&bytes) {
         tracing::warn!(error = %err, "failed to gzip challenge response body");
-        return Response::from_parts(parts, axum::body::Body::empty());
+        return Response::from_parts(parts, Body::empty());
     }
     let compressed = match encoder.finish() {
         Ok(data) => data,
         Err(err) => {
             tracing::warn!(error = %err, "failed to finish gzip challenge response body");
-            return Response::from_parts(parts, axum::body::Body::empty());
+            return Response::from_parts(parts, Body::empty());
         }
     };
 
-    parts.headers.insert(header::CONTENT_ENCODING, header::HeaderValue::from_static("gzip"));
-    parts.headers.append(header::VARY, header::HeaderValue::from_static("Accept-Encoding"));
+    parts.headers.insert(header::CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+    parts.headers.append(header::VARY, HeaderValue::from_static("Accept-Encoding"));
     parts.headers.insert(
         header::CONTENT_LENGTH,
-        header::HeaderValue::from_str(&compressed.len().to_string()).unwrap_or_else(|_| header::HeaderValue::from_static("0")),
+        HeaderValue::from_str(&compressed.len().to_string()).unwrap_or_else(|_| HeaderValue::from_static("0")),
     );
 
-    Response::from_parts(parts, axum::body::Body::from(compressed))
+    Response::from_parts(parts, Body::from(compressed))
 }
 
 fn accepts_gzip(headers: &HeaderMap) -> bool {
