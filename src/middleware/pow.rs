@@ -19,9 +19,12 @@ use crate::protocol::http::HeaderMapExt;
 use crate::rules::{RuleAction, RuleDecision};
 use crate::state::AppState;
 
+#[derive(Clone, Copy, Debug)]
+pub struct PowVerified;
+
 pub async fn pow_gate(
     State(state): State<Arc<AppState>>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     tracing::debug!(method = %req.method(), path = %req.uri().path(), "pow gate check");
@@ -60,6 +63,7 @@ pub async fn pow_gate(
     if let Some(cookie) = extract_cookie(req.headers()) {
         if verify_cookie(&state, &req, &cookie) {
             tracing::debug!("pow cookie verified");
+            req.extensions_mut().insert(PowVerified);
             return next.run(req).await;
         }
         tracing::debug!("pow cookie invalid");

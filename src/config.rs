@@ -229,14 +229,22 @@ impl Default for PowConfig {
 #[serde(default)]
 pub struct ProxyConfig {
     pub target: String,
+    pub host_rule: Vec<ProxyHostRule>,
 }
 
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
             target: "http://127.0.0.1:1234".to_string(),
+            host_rule: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProxyHostRule {
+    pub host: String,
+    pub target: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
