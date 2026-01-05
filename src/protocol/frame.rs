@@ -183,7 +183,7 @@ fn append_tlv(mut buf: Vec<u8>, t: u8, v: &[u8]) -> Vec<u8> {
     buf
 }
 
-fn parse_tlv(payload: &[u8]) -> anyhow::Result<HashMap<u8, Vec<u8>>> {
+fn parse_tlv<'a>(payload: &'a [u8]) -> anyhow::Result<HashMap<u8, &'a [u8]>> {
     let mut fields = HashMap::new();
     let mut idx = 0usize;
     while idx < payload.len() {
@@ -196,7 +196,7 @@ fn parse_tlv(payload: &[u8]) -> anyhow::Result<HashMap<u8, Vec<u8>>> {
         if payload.len() - idx < len {
             anyhow::bail!("invalid tlv length");
         }
-        fields.insert(t, payload[idx..idx + len].to_vec());
+        fields.insert(t, &payload[idx..idx + len]);
         idx += len;
     }
     Ok(fields)

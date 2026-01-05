@@ -214,7 +214,7 @@ pub async fn pow_verify(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .unwrap_or_default();
-    let path = parts.uri.path();
+    //let path = parts.uri.path();
     let host = headers_host(&parts.headers).unwrap_or_default();
     
     // 提取并格式化计算时间
@@ -229,9 +229,9 @@ pub async fn pow_verify(
             client_ip = %final_ip.0,
             ip_source = %final_ip.1.get_string(),
             accept_language = %accept_language,
-            path = %path,
             host = %host,
             elapsed = %time_str,
+            redirect = %redirect,
             "{}",
             MSG_POW_VERIFIED
         );
@@ -242,8 +242,8 @@ pub async fn pow_verify(
             ip_source = %final_ip.1.get_string(),
             user_agent = %user_agent,
             accept_language = %accept_language,
-            path = %path,
             host = %host,
+            redirect = %redirect,
             "{}",
             MSG_POW_VERIFIED
         );

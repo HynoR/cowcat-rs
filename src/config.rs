@@ -174,11 +174,11 @@ impl Config {
     }
 
     pub fn print_config(&self) {
-        tracing::info!("SERVER config: {:?}", self.server);
-        tracing::info!("POW config: {:?}", self.pow);
-        tracing::info!("PROXY config: {:?}", self.proxy);
+        tracing::info!("SERVER: {:?}", self.server);
+        tracing::info!("POW: {:?}", self.pow);
+        tracing::info!("PROXY: {:?}", self.proxy);
         if self.rules.enabled {
-            tracing::info!("RULES config: {} rules , default action: {:?}", self.rules.get_rule_len(), self.rules.default_action);
+            tracing::info!("RULES: {} rules , default action: {:?}", self.rules.get_rule_len(), self.rules.default_action);
         }
     }
 }
