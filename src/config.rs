@@ -259,6 +259,8 @@ pub struct RulesConfig {
     pub enabled: bool,
     pub default_action: RuleAction,
     pub rule: Vec<RuleConfig>,
+    pub bot_dns: Option<Vec<String>>,
+    pub bot_allowlist_file: Option<String>,
 }
 
 impl Default for RulesConfig {
@@ -267,6 +269,8 @@ impl Default for RulesConfig {
             enabled: false,
             default_action: RuleAction::Challenge,
             rule: Vec::new(),
+            bot_dns: None,
+            bot_allowlist_file: None,
         }
     }
 }
@@ -287,6 +291,7 @@ pub struct RuleConfig {
     pub path_exact: Option<String>,
     pub header: Option<HeaderMatch>,
     pub ip_cidr: Option<Vec<String>>,
+    pub bot: Option<BotMode>,
 }
 
 impl Default for RuleConfig {
@@ -299,6 +304,7 @@ impl Default for RuleConfig {
             path_exact: None,
             header: None,
             ip_cidr: None,
+            bot: None,
         }
     }
 }
@@ -308,4 +314,11 @@ pub struct HeaderMatch {
     pub name: String,
     pub equals: Option<String>,
     pub contains: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BotMode {
+    Default,
+    Strict,
 }

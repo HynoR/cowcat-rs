@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use axum::http::{header, HeaderMap, Request, StatusCode};
+use axum::extract::{Request, State};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use flate2::write::GzEncoder;
@@ -12,12 +13,12 @@ use crate::config::IpPolicy;
 use crate::crypto::{compute_ip_hash, compute_ua_hash};
 use crate::handlers::pow::{build_challenge_response, POW_COOKIE_NAME, POW_PREFIX};
 use crate::ip_source::ip::resolve_request_ip;
-use crate::rules::{RuleAction, RuleDecision};
+use crate::rules::RuleAction;
 use crate::state::AppState;
 
 pub async fn pow_gate(
-    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-    req: Request<axum::body::Body>,
+    State(state): State<Arc<AppState>>,
+    req: Request,
     next: Next,
 ) -> Response {
     tracing::debug!(method = %req.method(), path = %req.uri().path(), "pow gate check");
@@ -61,7 +62,13 @@ pub async fn pow_gate(
         tracing::debug!("pow cookie invalid");
     }
 
-    if let Some(decision) = evaluate_rules(&state, &req) {
+    // Extract data before async call to avoid holding &Request across await
+    let (ip, _) = resolve_request_ip(req.headers(), req.extensions());
+    let ip_addr = crate::crypto::parse_ip(&ip);
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    
+    if let Some(decision) = state.rules.evaluate_async(&path, &headers, ip_addr, &state.bot).await {
         return match decision.action {
             RuleAction::Allow => {
                 tracing::info!("rule decision: allow");
@@ -131,17 +138,11 @@ pub async fn pow_gate(
     maybe_gzip_challenge_response(req.headers(), resp).await
 }
 
-fn evaluate_rules(state: &AppState, req: &Request<axum::body::Body>) -> Option<RuleDecision> {
-    let (ip, _) = resolve_request_ip(req.headers(), req.extensions());
-    let ip_addr = crate::crypto::parse_ip(&ip);
-    state.rules.evaluate(req.uri().path(), req.headers(), ip_addr)
-}
-
 fn is_pow_path(path: &str) -> bool {
     path.starts_with(POW_PREFIX)
 }
 
-fn is_service_worker_request(req: &Request<axum::body::Body>) -> bool {
+fn is_service_worker_request(req: &Request) -> bool {
     let method = req.method();
     if method != axum::http::Method::GET && method != axum::http::Method::HEAD {
         return false;
@@ -167,7 +168,7 @@ fn is_service_worker_request(req: &Request<axum::body::Body>) -> bool {
     path.ends_with(".js") || path.ends_with(".mjs")
 }
 
-fn redirect_target(req: &Request<axum::body::Body>) -> &str {
+fn redirect_target(req: &Request) -> &str {
     req.uri()
         .path_and_query()
         .map(|p| p.as_str())
@@ -184,7 +185,7 @@ fn extract_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
     None
 }
 
-fn verify_cookie(state: &AppState, req: &Request<axum::body::Body>, value: &str) -> bool {
+fn verify_cookie(state: &AppState, req: &Request, value: &str) -> bool {
     tracing::debug!("verifying pow cookie: {}", value);
     let payload = match crate::crypto::verify_cookie(&state.server_secret, value) {
         Some(payload) => payload,

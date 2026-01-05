@@ -1,9 +1,10 @@
-use axum::http::HeaderMap;
+use axum::http::{header, HeaderMap};
 use ipnet::IpNet;
 use serde::Deserialize;
 use std::net::IpAddr;
 
-use crate::config::{HeaderMatch, RulesConfig};
+use crate::bot::BotState;
+use crate::config::{BotMode, HeaderMatch, RulesConfig};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,6 +35,7 @@ struct Matcher {
     path_exact: Option<String>,
     header: Option<HeaderPredicate>,
     ip_nets: Vec<IpNet>,
+    bot_mode: Option<BotMode>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +62,7 @@ impl RulesEngine {
                 path_exact: rule_cfg.path_exact.clone(),
                 header,
                 ip_nets,
+                bot_mode: rule_cfg.bot,
             };
             let rule = Rule {
                 name: rule_cfg.name.clone(),
@@ -76,17 +79,18 @@ impl RulesEngine {
         })
     }
 
-    pub fn evaluate(
+    pub async fn evaluate_async(
         &self,
         path: &str,
         headers: &HeaderMap,
         client_ip: Option<IpAddr>,
+        bot: &BotState,
     ) -> Option<RuleDecision> {
         if !self.enabled {
             return None;
         }
         for rule in &self.rules {
-            if rule.matcher.is_match(path, headers, client_ip) {
+            if rule.matcher.is_match(path, headers, client_ip, bot).await {
                 tracing::info!(rule = rule.name.as_deref().unwrap_or("unnamed"), "rule matched");
                 return Some(RuleDecision {
                     action: rule.action.clone(),
@@ -102,7 +106,7 @@ impl RulesEngine {
 }
 
 impl Matcher {
-    fn is_match(&self, path: &str, headers: &HeaderMap, client_ip: Option<IpAddr>) -> bool {
+    fn basic_match(&self, path: &str, headers: &HeaderMap, client_ip: Option<IpAddr>) -> bool {
         if let Some(prefix) = &self.path_prefix {
             if !path.starts_with(prefix) {
                 return false;
@@ -126,14 +130,27 @@ impl Matcher {
                 return false;
             }
         }
-        if self.path_prefix.is_none()
-            && self.path_exact.is_none()
-            && self.header.is_none()
-            && self.ip_nets.is_empty()
-        {
-            return true;
-        }
         true
+    }
+
+    async fn is_match(
+        &self,
+        path: &str,
+        headers: &HeaderMap,
+        client_ip: Option<IpAddr>,
+        bot: &BotState,
+    ) -> bool {
+        if !self.basic_match(path, headers, client_ip) {
+            return false;
+        }
+        let Some(mode) = self.bot_mode else {
+            return true;
+        };
+        let ua = extract_user_agent(headers);
+        match mode {
+            BotMode::Default => BotState::ua_matches_bot(ua),
+            BotMode::Strict => bot.is_strict_bot(ua, client_ip).await,
+        }
     }
 }
 
@@ -180,6 +197,13 @@ fn to_header_predicate(match_cfg: &HeaderMatch) -> anyhow::Result<HeaderPredicat
         equals: match_cfg.equals.as_ref().map(|s| s.to_ascii_lowercase()),
         contains: match_cfg.contains.as_ref().map(|s| s.to_ascii_lowercase()),
     })
+}
+
+fn extract_user_agent(headers: &HeaderMap) -> &str {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
 }
 
 pub fn clamp_difficulty(value: i32) -> i32 {

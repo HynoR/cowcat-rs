@@ -1,5 +1,6 @@
 mod config;
 mod crypto;
+mod bot;
 mod handlers;
 mod ip_source;
 mod middleware;

@@ -5,6 +5,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use bytes::Bytes;
 use ring::rand::{SecureRandom, SystemRandom};
 
+use crate::bot::BotState;
 use crate::config::Config;
 use crate::rules::RulesEngine;
 use hyper_util::client::legacy::connect::HttpConnector;
@@ -17,10 +18,6 @@ use crate::storage::TaskStore;
 pub struct ProxyTarget {
     pub uri: Uri,
     pub host_value: HeaderValue,
-    #[allow(dead_code)]
-    pub host_string: String,
-    #[allow(dead_code)]
-    pub scheme: String,
     pub x_forwarded_host: HeaderValue,
     pub x_forwarded_proto: HeaderValue,
 }
@@ -42,6 +39,7 @@ impl FaviconCache {
 pub struct AppState {
     pub config: Config,
     pub rules: RulesEngine,
+    pub bot: BotState,
     pub task_store: Arc<TaskStore>,
     pub server_secret: String,
     pub template: String,
@@ -55,6 +53,7 @@ pub struct AppState {
 impl AppState {
     pub async fn new(config: Config) -> anyhow::Result<Self> {
         let rules = RulesEngine::from_config(&config.rules)?;
+        let bot = BotState::new(&config.rules)?;
         let task_store = TaskStore::new();
         let server_secret = build_server_secret(&config.pow.salt)?;
         tracing::debug!("server secret: {}", server_secret);
@@ -79,8 +78,6 @@ impl AppState {
             ProxyTarget {
                 uri: target_uri,
                 host_value: host_value.clone(),
-                host_string,
-                scheme,
                 x_forwarded_host: host_value,
                 x_forwarded_proto: scheme_value,
             }
@@ -89,6 +86,7 @@ impl AppState {
         Ok(Self {
             config,
             rules,
+            bot,
             task_store,
             server_secret,
             template,
