@@ -1,5 +1,6 @@
 use std::path::{Component, Path};
 
+use bytes::Bytes;
 use rust_embed::RustEmbed;
 use base64::Engine;
 
@@ -22,9 +23,14 @@ pub fn load_template_assets() -> anyhow::Result<(String, String, String)> {
     Ok((template, img1, img2))
 }
 
-pub fn get_asset(path: &str) -> Option<Vec<u8>> {
+pub fn get_asset(path: &str) -> Option<Bytes> {
     let normalized = sanitize_path(path)?;
-    EmbeddedAssets::get(&normalized).map(|data| data.data.into_owned())
+    EmbeddedAssets::get(&normalized).map(|data| {
+        match data.data {
+            std::borrow::Cow::Borrowed(bytes) => Bytes::from_static(bytes),
+            std::borrow::Cow::Owned(vec) => Bytes::from(vec),
+        }
+    })
 }
 
 fn normalize_template(raw: &str) -> String {

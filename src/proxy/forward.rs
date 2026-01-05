@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::http::{header, HeaderMap, Request, Response, StatusCode, Uri};
 use axum::response::IntoResponse;
 use crate::handlers::pow::POW_PREFIX;
-use crate::state::AppState;
+use crate::state::{AppState, ProxyTarget};
 
 pub async fn proxy_handler(
     State(state): State<Arc<AppState>>,
@@ -15,25 +15,8 @@ pub async fn proxy_handler(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let target = match state.config.proxy.target.parse::<Uri>() {
-        Ok(uri) => uri,
-        Err(err) => {
-            tracing::error!(error = %err, "invalid proxy target");
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-
-    let host = match target.authority() {
-        Some(auth) => auth.to_string(),
-        None => {
-            tracing::error!("proxy target missing authority");
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-    let scheme = target.scheme_str().unwrap_or("http").to_string();
-
-    *req.uri_mut() = build_target_uri(&target, req.uri());
-    rewrite_headers(req.headers_mut(), &host, &scheme);
+    *req.uri_mut() = build_target_uri(&state.proxy_target.uri, req.uri());
+    rewrite_headers(req.headers_mut(), &state.proxy_target);
 
     match state.proxy_client.request(req).await {
         Ok(resp) => {
@@ -56,16 +39,12 @@ pub fn build_target_uri(target: &Uri, original: &Uri) -> Uri {
     Uri::from_parts(parts).unwrap_or_else(|_| target.clone())
 }
 
-pub fn rewrite_headers(headers: &mut HeaderMap, host: &str, scheme: &str) {
-    if let Ok(host_value) = header::HeaderValue::from_str(host) {
-        headers.insert(header::HOST, host_value.clone());
-        headers
-            .entry(header::HeaderName::from_static("x-forwarded-host"))
-            .or_insert_with(|| host_value.clone());
-    }
-    if let Ok(scheme_value) = header::HeaderValue::from_str(scheme) {
-        headers
-            .entry(header::HeaderName::from_static("x-forwarded-proto"))
-            .or_insert_with(|| scheme_value.clone());
-    }
+pub fn rewrite_headers(headers: &mut HeaderMap, target: &ProxyTarget) {
+    headers.insert(header::HOST, target.host_value.clone());
+    headers
+        .entry(header::HeaderName::from_static("x-forwarded-host"))
+        .or_insert_with(|| target.x_forwarded_host.clone());
+    headers
+        .entry(header::HeaderName::from_static("x-forwarded-proto"))
+        .or_insert_with(|| target.x_forwarded_proto.clone());
 }

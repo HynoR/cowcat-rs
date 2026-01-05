@@ -157,7 +157,7 @@ pub fn encode_task_response_frame(
     worker_type: &str,
 ) -> anyhow::Result<Vec<u8>> {
     let resp = BinaryTaskResponse {
-        task_id: task.task_id.0.clone(),
+        task_id: task.task_id.0.to_string(),
         seed: task.seed.0.clone(),
         bits: task.bits as i32,
         exp: task.exp,

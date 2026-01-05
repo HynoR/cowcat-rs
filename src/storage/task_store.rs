@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -8,7 +9,7 @@ use time::OffsetDateTime;
 const TASK_CLEANUP_INTERVAL: u64 = 300;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TaskId(pub String);
+pub struct TaskId(pub Arc<str>);
 
 impl TaskId {
     pub fn short_id(&self) -> &str {
@@ -25,7 +26,19 @@ impl fmt::Display for TaskId {
 
 impl From<String> for TaskId {
     fn from(s: String) -> Self {
-        TaskId(s)
+        TaskId(Arc::from(s))
+    }
+}
+
+impl From<&str> for TaskId {
+    fn from(s: &str) -> Self {
+        TaskId(Arc::from(s))
+    }
+}
+
+impl Borrow<str> for TaskId {
+    fn borrow(&self) -> &str {
+        &self.0
     }
 }
 
@@ -109,7 +122,7 @@ pub struct Task {
 
 #[derive(Clone)]
 pub struct TaskStore {
-    inner: Arc<Mutex<HashMap<String, Task>>>,
+    inner: Arc<Mutex<HashMap<Arc<str>, Task>>>,
 }
 
 impl TaskStore {

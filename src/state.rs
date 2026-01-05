@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use bytes::Bytes;
 use ring::rand::{SecureRandom, SystemRandom};
 
@@ -12,6 +12,18 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 
 use crate::storage::TaskStore;
+
+#[derive(Clone)]
+pub struct ProxyTarget {
+    pub uri: Uri,
+    pub host_value: HeaderValue,
+    #[allow(dead_code)]
+    pub host_string: String,
+    #[allow(dead_code)]
+    pub scheme: String,
+    pub x_forwarded_host: HeaderValue,
+    pub x_forwarded_proto: HeaderValue,
+}
 
 #[derive(Clone)]
 pub struct FaviconCache {
@@ -37,6 +49,7 @@ pub struct AppState {
     pub cowcat_image2: String,
     pub proxy_client: Client<HttpConnector, axum::body::Body>,
     pub favicon_cache: Arc<tokio::sync::RwLock<Option<FaviconCache>>>,
+    pub proxy_target: ProxyTarget,
 }
 
 impl AppState {
@@ -49,6 +62,30 @@ impl AppState {
 
         let proxy_client = Client::builder(TokioExecutor::new()).build(HttpConnector::new());
 
+        // 预解析代理目标配置
+        let proxy_target = {
+            let target_uri = config.proxy.target.parse::<Uri>()
+                .map_err(|err| anyhow::anyhow!("invalid proxy target: {err}"))?;
+            let host_string = target_uri.authority()
+                .ok_or_else(|| anyhow::anyhow!("proxy target missing authority"))?
+                .to_string();
+            let scheme = target_uri.scheme_str().unwrap_or("http").to_string();
+            
+            let host_value = HeaderValue::from_str(&host_string)
+                .map_err(|err| anyhow::anyhow!("invalid host header value: {err}"))?;
+            let scheme_value = HeaderValue::from_str(&scheme)
+                .map_err(|err| anyhow::anyhow!("invalid scheme header value: {err}"))?;
+            
+            ProxyTarget {
+                uri: target_uri,
+                host_value: host_value.clone(),
+                host_string,
+                scheme,
+                x_forwarded_host: host_value,
+                x_forwarded_proto: scheme_value,
+            }
+        };
+
         Ok(Self {
             config,
             rules,
@@ -59,6 +96,7 @@ impl AppState {
             cowcat_image2,
             proxy_client,
             favicon_cache: Arc::new(tokio::sync::RwLock::new(None)),
+            proxy_target,
         })
     }
 }

@@ -29,30 +29,12 @@ pub async fn favicon_handler(
         }
     }
 
-    // 构建上游请求
-    let target = match state.config.proxy.target.parse::<Uri>() {
-        Ok(uri) => uri,
-        Err(err) => {
-            tracing::error!(error = %err, "invalid proxy target");
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-
-    let host = match target.authority() {
-        Some(auth) => auth.to_string(),
-        None => {
-            tracing::error!("proxy target missing authority");
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-    let scheme = target.scheme_str().unwrap_or("http").to_string();
-
     // 构建目标 URI（固定为 /favicon.ico）
     let mut target_uri_parts = req.uri().clone().into_parts();
     target_uri_parts.path_and_query = Some("/favicon.ico".parse().unwrap());
     let target_uri = Uri::from_parts(target_uri_parts).unwrap();
-    *req.uri_mut() = build_target_uri(&target, &target_uri);
-    rewrite_headers(req.headers_mut(), &host, &scheme);
+    *req.uri_mut() = build_target_uri(&state.proxy_target.uri, &target_uri);
+    rewrite_headers(req.headers_mut(), &state.proxy_target);
 
     // 请求上游
     let resp = match state.proxy_client.request(req).await {

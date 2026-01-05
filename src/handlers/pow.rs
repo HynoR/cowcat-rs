@@ -78,7 +78,7 @@ pub async fn pow_task(
     state.task_store.insert(task.clone()).await;
 
     let resp = BinaryTaskResponse {
-        task_id: task.task_id.0.clone(),
+        task_id: task.task_id.0.to_string(),
         seed: task.seed.0.clone(),
         bits: task.bits as i32,
         exp: task.exp,
@@ -153,11 +153,11 @@ pub async fn pow_verify(
     }).await {
         Ok(task) => task,
         Err(ConsumeError::NotFound) => {
-            tracing::warn!(task_id = %TaskId(verify_req.task_id.clone()).short_id(), "{}", MSG_TASK_NOT_FOUND_OR_EXPIRED);
+            tracing::warn!(task_id = %TaskId::from(verify_req.task_id.as_str()).short_id(), "{}", MSG_TASK_NOT_FOUND_OR_EXPIRED);
             return error_frame(StatusCode::BAD_REQUEST, MSG_TASK_NOT_FOUND_OR_EXPIRED);
         }
         Err(ConsumeError::Expired) => {
-            tracing::warn!(task_id = %TaskId(verify_req.task_id.clone()).short_id(), "{}", MSG_TASK_EXPIRED);
+            tracing::warn!(task_id = %TaskId::from(verify_req.task_id.as_str()).short_id(), "{}", MSG_TASK_EXPIRED);
             return error_frame(StatusCode::BAD_REQUEST, MSG_TASK_EXPIRED);
         }
         Err(ConsumeError::ValidationFailed(msg)) => {
@@ -230,8 +230,8 @@ pub async fn pow_verify(
             ip_source = %final_ip.1.get_string(),
             accept_language = %accept_language,
             host = %host,
-            elapsed = %time_str,
             redirect = %redirect,
+            elapsed = %time_str,
             "{}",
             MSG_POW_VERIFIED
         );
@@ -362,7 +362,7 @@ fn build_task(
     let scope = headers_host(headers).unwrap_or_else(|| "unknown".to_string());
 
     Ok(Task {
-        task_id: TaskId(task_id),
+        task_id: TaskId::from(task_id),
         seed: Seed(seed),
         bits,
         exp,
