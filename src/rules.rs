@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::net::IpAddr;
 
 use crate::config::{HeaderMatch, RulesConfig};
+use crate::protocol::http::HeaderMapExt;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -139,10 +140,7 @@ impl Matcher {
 
 impl HeaderPredicate {
     fn is_match(&self, headers: &HeaderMap) -> bool {
-        let Some(value) = headers.get(&self.name) else {
-            return false;
-        };
-        let Ok(value) = value.to_str() else {
+        let Some(value) = headers.get_str(self.name.as_str()) else {
             return false;
         };
         let value_lower = value.to_ascii_lowercase();

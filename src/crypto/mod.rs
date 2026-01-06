@@ -11,6 +11,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use base64::Engine;
 
 use crate::config::IpPolicy;
+use crate::protocol::http::HeaderMapExt;
 
 pub use pow::verify_pow;
 pub use token::{generate_cookie, verify_cookie};
@@ -47,26 +48,15 @@ pub fn extract_client_ip(headers: &HeaderMap, extensions: &Extensions, policy: I
     match policy {
         IpPolicy::None => String::new(),
         IpPolicy::Enable => {
-            if let Some(ip) = header_ip(headers, header::HeaderName::from_static("x-real-ip")) {
+            if let Some(ip) = headers.get_ip(header::HeaderName::from_static("x-real-ip")) {
                 return ip;
             }
-            if let Some(ip) = header_ip(headers, header::HeaderName::from_static("x-forwarded-for")) {
+            if let Some(ip) = headers.get_ip(header::HeaderName::from_static("x-forwarded-for")) {
                 return ip;
             }
             remote_ip(extensions).unwrap_or_default()
         }
         IpPolicy::Strict => remote_ip(extensions).unwrap_or_default(),
-    }
-}
-
-fn header_ip(headers: &HeaderMap, name: header::HeaderName) -> Option<String> {
-    let value = headers.get(name)?;
-    let value = value.to_str().ok()?;
-    let first = value.split(',').next()?.trim();
-    if first.is_empty() {
-        None
-    } else {
-        Some(first.to_string())
     }
 }
 

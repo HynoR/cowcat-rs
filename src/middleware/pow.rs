@@ -15,6 +15,7 @@ use crate::config::IpPolicy;
 use crate::crypto::{compute_ip_hash, compute_ua_hash};
 use crate::handlers::pow::{build_challenge_response, POW_COOKIE_NAME, POW_PREFIX};
 use crate::ip_source::ip::resolve_request_ip;
+use crate::protocol::http::HeaderMapExt;
 use crate::rules::{RuleAction, RuleDecision};
 use crate::state::AppState;
 
@@ -100,9 +101,9 @@ pub async fn pow_gate(
         };
     }
 
-    let user_agent = get_str_from_header(req.headers(), "User-Agent");
-    let accept_language = get_str_from_header(req.headers(), "Accept-Language");
-    let host = get_str_from_header(req.headers(), "Host");
+    let user_agent = req.headers().get_string_or_default("User-Agent");
+    let accept_language = req.headers().get_string_or_default("Accept-Language");
+    let host = req.headers().get_string_or_default("Host");
 
     tracing::info!(
         difficulty = state.config.pow.difficulty,
@@ -125,10 +126,6 @@ pub async fn pow_gate(
     maybe_gzip_challenge_response(req.headers(), resp).await
 }
 
-fn get_str_from_header(headers: &HeaderMap, name: &str) -> String {
-    headers.get(name).and_then(|v| v.to_str().ok()).map(|s| s.to_string()).unwrap_or_default()
-}
-
 fn evaluate_rules(
     state: &AppState,
     path: &str,
@@ -149,15 +146,13 @@ fn is_service_worker_request(req: &Request) -> bool {
     }
     let dest = req
         .headers()
-        .get("sec-fetch-dest")
-        .and_then(|v| v.to_str().ok())
+        .get_str("sec-fetch-dest")
         .unwrap_or("")
         .trim()
         .to_ascii_lowercase();
     let sw = req
         .headers()
-        .get("service-worker")
-        .and_then(|v| v.to_str().ok())
+        .get_str("service-worker")
         .unwrap_or("")
         .trim()
         .to_ascii_lowercase();
@@ -196,8 +191,7 @@ fn verify_cookie(state: &AppState, req: &Request, value: &str) -> bool {
     };
     let ua_hash = compute_ua_hash(
         req.headers()
-            .get(header::USER_AGENT)
-            .and_then(|v| v.to_str().ok())
+            .get_str(header::USER_AGENT)
             .unwrap_or_default(),
     );
     if payload.ua != ua_hash {
@@ -269,7 +263,7 @@ async fn maybe_gzip_challenge_response(headers: &HeaderMap, response: Response) 
 }
 
 fn accepts_gzip(headers: &HeaderMap) -> bool {
-    let raw = match headers.get(header::ACCEPT_ENCODING).and_then(|v| v.to_str().ok()) {
+    let raw = match headers.get_str(header::ACCEPT_ENCODING) {
         Some(value) => value,
         None => return false,
     };

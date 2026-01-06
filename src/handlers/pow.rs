@@ -16,6 +16,7 @@ use crate::protocol::frame::{
     encode_task_response, encode_verify_response, deobfuscate_frame, BinaryTaskResponse,
     BinaryVerifyResponse, FRAME_TYPE_TASK_REQUEST, FRAME_TYPE_VERIFY_REQUEST, XOR_KEY,
 };
+use crate::protocol::http::HeaderMapExt;
 use crate::rules::clamp_difficulty;
 use crate::state::AppState;
 use crate::storage::{ConsumeError, IpHash, Scope, Seed, Task, TaskId, UaHash};
@@ -209,11 +210,7 @@ pub async fn pow_verify(
     }
     // 收集和打印用户信息
     let user_agent = headers_user_agent(&parts.headers);
-    let accept_language = parts.headers
-        .get(header::ACCEPT_LANGUAGE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+    let accept_language = parts.headers.get_string_or_default(header::ACCEPT_LANGUAGE);
     //let path = parts.uri.path();
     let host = headers_host(&parts.headers).unwrap_or_default();
     
@@ -381,14 +378,11 @@ fn error_frame(status: StatusCode, message: &str) -> Response<axum::body::Body> 
 }
 
 fn headers_user_agent(headers: &HeaderMap) -> &str {
-    headers
-        .get(header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
+    headers.get_str(header::USER_AGENT).unwrap_or_default()
 }
 
 fn headers_host(headers: &HeaderMap) -> Option<String> {
-    headers.get(header::HOST).and_then(|v| v.to_str().ok()).map(|s| s.to_string())
+    headers.get_string(header::HOST)
 }
 
 fn extract_and_format_compute_time(uri: &Uri) -> Option<String> {
