@@ -14,7 +14,7 @@ use std::io::Write;
 use crate::config::IpPolicy;
 use crate::crypto::{compute_ip_hash, compute_ua_hash};
 use crate::handlers::pow::{build_challenge_response, POW_COOKIE_NAME, POW_PREFIX};
-use crate::ip_source::ip::resolve_request_ip;
+use crate::protocol::ip::resolve_request_ip;
 use crate::protocol::http::HeaderMapExt;
 use crate::rules::{RuleAction, RuleDecision};
 use crate::state::AppState;

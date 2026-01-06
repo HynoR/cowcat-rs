@@ -11,7 +11,6 @@ pub enum IpSource {
 }
 
 impl IpSource {
-    // 返回实际字符串
     pub fn get_string(&self) -> String {
         match self {
             IpSource::ClientIp => "client_ip".to_string(),

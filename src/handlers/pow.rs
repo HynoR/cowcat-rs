@@ -21,7 +21,7 @@ use crate::rules::clamp_difficulty;
 use crate::state::AppState;
 use crate::storage::{ConsumeError, IpHash, Scope, Seed, Task, TaskId, UaHash};
 use crate::{crypto, protocol};
-use crate::ip_source::ip::resolve_request_ip;
+use crate::protocol::ip::resolve_request_ip;
 
 pub const POW_PREFIX: &str = "/__cowcatwaf";
 pub const POW_COOKIE_NAME: &str = "cowcat.waf.token";
