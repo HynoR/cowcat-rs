@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::net::IpAddr;
 
 use crate::config::{HeaderMatch, RulesConfig};
+use crate::protocol::http::HeaderMapExt;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -39,8 +40,8 @@ struct Matcher {
 #[derive(Debug, Clone)]
 struct HeaderPredicate {
     name: String,
-    equals: Option<String>,
-    contains: Option<String>,
+    equals: Option<String>,  // 预规范化为小写
+    contains: Option<String>,  // 预规范化为小写
 }
 
 #[derive(Debug, Clone)]
@@ -139,18 +140,15 @@ impl Matcher {
 
 impl HeaderPredicate {
     fn is_match(&self, headers: &HeaderMap) -> bool {
-        let Some(value) = headers.get(&self.name) else {
-            return false;
-        };
-        let Ok(value) = value.to_str() else {
+        let Some(value) = headers.get_str(self.name.as_str()) else {
             return false;
         };
         let value_lower = value.to_ascii_lowercase();
         if let Some(expected) = &self.equals {
-            return value_lower == expected.to_ascii_lowercase();
+            return value_lower == *expected;
         }
         if let Some(contains) = &self.contains {
-            return value_lower.contains(&contains.to_ascii_lowercase());
+            return value_lower.contains(contains);
         }
         true
     }
@@ -177,8 +175,8 @@ fn to_header_predicate(match_cfg: &HeaderMatch) -> anyhow::Result<HeaderPredicat
     }
     Ok(HeaderPredicate {
         name: name.to_string(),
-        equals: match_cfg.equals.clone(),
-        contains: match_cfg.contains.clone(),
+        equals: match_cfg.equals.as_ref().map(|s| s.to_ascii_lowercase()),
+        contains: match_cfg.contains.as_ref().map(|s| s.to_ascii_lowercase()),
     })
 }
 

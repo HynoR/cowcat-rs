@@ -157,13 +157,13 @@ pub fn encode_task_response_frame(
     worker_type: &str,
 ) -> anyhow::Result<Vec<u8>> {
     let resp = BinaryTaskResponse {
-        task_id: task.task_id.clone(),
-        seed: task.seed.clone(),
-        bits: task.bits,
+        task_id: task.task_id.0.to_string(),
+        seed: task.seed.0.clone(),
+        bits: task.bits as i32,
         exp: task.exp,
-        scope: task.scope.clone(),
-        ua_hash: task.ua_hash.clone(),
-        ip_hash: task.ip_hash.clone(),
+        scope: task.scope.0.clone(),
+        ua_hash: task.ua_hash.0.clone(),
+        ip_hash: task.ip_hash.0.clone(),
         workers,
         worker_type: worker_type.to_string(),
     };
@@ -183,7 +183,7 @@ fn append_tlv(mut buf: Vec<u8>, t: u8, v: &[u8]) -> Vec<u8> {
     buf
 }
 
-fn parse_tlv(payload: &[u8]) -> anyhow::Result<HashMap<u8, Vec<u8>>> {
+fn parse_tlv<'a>(payload: &'a [u8]) -> anyhow::Result<HashMap<u8, &'a [u8]>> {
     let mut fields = HashMap::new();
     let mut idx = 0usize;
     while idx < payload.len() {
@@ -196,7 +196,7 @@ fn parse_tlv(payload: &[u8]) -> anyhow::Result<HashMap<u8, Vec<u8>>> {
         if payload.len() - idx < len {
             anyhow::bail!("invalid tlv length");
         }
-        fields.insert(t, payload[idx..idx + len].to_vec());
+        fields.insert(t, &payload[idx..idx + len]);
         idx += len;
     }
     Ok(fields)

@@ -174,7 +174,12 @@ impl Config {
     }
 
     pub fn print_config(&self) {
-        tracing::info!("config: {:?}", self);
+        tracing::info!("SERVER: {:?}", self.server);
+        tracing::info!("POW: {:?}", self.pow);
+        tracing::info!("PROXY: {:?}", self.proxy);
+        if self.rules.enabled {
+            tracing::info!("RULES: {} rules , default action: {:?}", self.rules.get_rule_len(), self.rules.default_action);
+        }
     }
 }
 
@@ -202,6 +207,7 @@ pub struct PowConfig {
     pub worker_type: String,
     pub ip_policy: IpPolicy,
     pub test_mode: bool,
+    pub secure: bool,
 }
 
 impl Default for PowConfig {
@@ -214,6 +220,7 @@ impl Default for PowConfig {
             worker_type: "wasm".to_string(),
             ip_policy: IpPolicy::None,
             test_mode: false,
+            secure: true,
         }
     }
 }
@@ -222,14 +229,22 @@ impl Default for PowConfig {
 #[serde(default)]
 pub struct ProxyConfig {
     pub target: String,
+    pub host_rule: Vec<ProxyHostRule>,
 }
 
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
             target: "http://127.0.0.1:1234".to_string(),
+            host_rule: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProxyHostRule {
+    pub host: String,
+    pub target: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -261,6 +276,12 @@ impl Default for RulesConfig {
             default_action: RuleAction::Challenge,
             rule: Vec::new(),
         }
+    }
+}
+
+impl RulesConfig {
+    pub fn get_rule_len(&self) -> usize {
+        self.rule.len()
     }
 }
 

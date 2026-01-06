@@ -41,7 +41,7 @@ body {
     width: min(560px, 100%);
 }
 
-.layout {
+.l {
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -57,7 +57,7 @@ h1 {
     font-weight: 650;
 }
 
-.status {
+.s {
     margin-top: 10px;
     min-height: 22px;
     font-size: 15px;
@@ -65,7 +65,7 @@ h1 {
     color: var(--muted);
 }
 
-.visual {
+.v {
     width: 256px;
     height: 256px;
     display: grid;
@@ -73,11 +73,11 @@ h1 {
     color: var(--accent);
     position: relative;
 }
-.visual svg {
+.v svg {
     width: 100%;
     height: 100%;
 }
-.visual img {
+.v img {
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -85,37 +85,37 @@ h1 {
     cursor: pointer;
 }
 
-.progress-container {
+.pc {
     width: 100%;
     margin-top: 4px;
 }
-.progress-percent {
+.pp {
     font-size: 22px;
     font-weight: 650;
     color: var(--accent);
     margin-bottom: 10px;
 }
-.progress-bar-wrapper {
+.pbw {
     width: 100%;
     height: 8px;
     background: var(--track);
     border-radius: 999px;
     overflow: hidden;
 }
-.progress-bar {
+.pb {
     height: 100%;
     background: var(--accent);
     border-radius: 999px;
     transition: width 0.2s ease;
 }
-.progress-text {
+.pt {
     font-size: 13px;
     color: var(--muted);
     margin-top: 10px;
     min-height: 18px;
 }
 
-.hash-stats {
+.hs {
     width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -123,30 +123,30 @@ h1 {
     padding-top: 16px;
     border-top: 1px solid var(--divider);
 }
-.hash-stat-item {
+.hsi {
     text-align: center;
 }
-.hash-stat-label {
+.hsl {
     font-size: 12px;
     color: var(--muted);
     margin-bottom: 6px;
 }
-.hash-stat-value {
+.hsv {
     font-size: 18px;
     font-weight: 650;
     color: var(--fg);
 }
 
-.error {
+.e {
     margin-top: 12px;
     color: var(--error);
 }
-.error-title {
+.et {
     font-weight: 650;
     font-size: 14px;
     margin-bottom: 6px;
 }
-.error-message {
+.em {
     color: var(--muted);
     font-size: 13px;
     line-height: 1.5;
@@ -154,11 +154,11 @@ h1 {
     max-width: 46ch;
     word-break: break-word;
 }
-.error-details {
+.ed {
     margin-top: 16px;
     text-align: left;
 }
-.error-details-toggle {
+.ed-toggle {
     background: none;
     border: 1px solid var(--divider);
     color: var(--fg);
@@ -169,11 +169,11 @@ h1 {
     font-family: inherit;
     transition: all 0.2s;
 }
-.error-details-toggle:hover {
+.ed-toggle:hover {
     background: var(--track);
     border-color: var(--accent);
 }
-.error-details-content {
+.ed-content {
     margin-top: 12px;
     padding: 14px;
     background: var(--track);
@@ -210,7 +210,7 @@ h1 {
     margin-top: 20px;
 }
 
-.manual-redirect-btn {
+.mrb {
     background: var(--accent);
     border: 1px solid var(--accent);
     color: white;
@@ -222,24 +222,23 @@ h1 {
     font-family: inherit;
     transition: all 0.2s;
 }
-
-.manual-redirect-btn:hover {
+.mrb:hover {
     opacity: 0.9;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.manual-redirect-btn:active {
+.mrb:active {
     transform: translateY(0);
 }
 
 @media (max-width: 420px) {
     body { padding: 22px 14px; }
     h1 { font-size: 24px; }
-    .visual { width: 200px; height: 200px; }
-    .hash-stats { grid-template-columns: 1fr; }
+    .v { width: 200px; height: 200px; }
+    .hs { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .progress-bar { transition: none; }
+    .pb { transition: none; }
 }

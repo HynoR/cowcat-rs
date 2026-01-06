@@ -13,6 +13,10 @@ test_mode = false
 [proxy]
 target = "http://127.0.0.1:1234"
 
+[[proxy.host_rule]]
+host = "example.com"
+target = "http://127.0.0.1:8081"
+
 [rules]
 enabled = true
 default_action = "challenge"

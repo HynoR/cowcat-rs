@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>安全验证</title>
-    <link rel="stylesheet" href="/__cowcatwaf/assets/catpaw.min.css">
+    <style id="catpaw-style">{{.CatpawCSS}}</style>
 
 </head>
 <body>
@@ -17,47 +17,47 @@
     </script>
 
     <div id="app">
-        <main class="layout">
+        <main class="l">
             <section>
                 <h1>安全验证</h1>
-                <div id="status-container" class="status"></div>
-                <div id="error-container" class="error" style="display: none;">
-                    <div class="error-title">验证失败</div>
-                    <div id="error-message" class="error-message"></div>
-                    <div id="error-details" class="error-details" style="display: none;">
-                        <button id="error-details-toggle" class="error-details-toggle">显示错误详情</button>
-                        <div id="error-details-content" class="error-details-content" style="display: none;">
+                <div id="status-container" class="s"></div>
+                <div id="error-container" class="e" style="display: none;">
+                    <div class="et">验证失败</div>
+                    <div id="error-message" class="em"></div>
+                    <div id="error-details" class="ed" style="display: none;">
+                        <button id="error-details-toggle" class="edt">显示错误详情</button>
+                        <div id="error-details-content" class="edc" style="display: none;">
                             <div id="error-details-list"></div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <section class="visual" aria-hidden="true">
+            <section class="v" aria-hidden="true">
                 <img id="visual-image-1" src="data:image/webp;base64,{{.CowcatImage1}}" alt="Logo" width="256" height="256" style="display: block;">
                 <img id="visual-image-2" src="data:image/webp;base64,{{.CowcatImage2}}" alt="Logo" width="256" height="256" style="display: none;">
             </section>
 
             <div id="manual-redirect-container" style="display: none;">
-                <button id="manual-redirect-btn" class="manual-redirect-btn" type="button">点击继续</button>
+                <button id="manual-redirect-btn" class="mrb" type="button">点击继续</button>
             </div>
 
-            <section class="progress-container" aria-label="计算进度">
-                <div id="progress-percent" class="progress-percent">0%</div>
-                <div class="progress-bar-wrapper">
-                    <div id="progress-bar" class="progress-bar" style="width: 0%;"></div>
+            <section class="pc" aria-label="计算进度">
+                <div id="progress-percent" class="pp">0%</div>
+                <div class="pbw">
+                    <div id="progress-bar" class="pb" style="width: 0%;"></div>
                 </div>
-                <div id="progress-text" class="progress-text">初始化</div>
+                <div id="progress-text" class="pt">初始化</div>
             </section>
 
-            <section id="hash-stats" class="hash-stats" aria-label="算力信息" style="display: none;">
-                <div class="hash-stat-item">
-                    <div class="hash-stat-label">计算速度</div>
-                    <div id="hash-rate-value" class="hash-stat-value">0 H/s</div>
+            <section id="hash-stats" class="hs" aria-label="算力信息" style="display: none;">
+                <div class="hsi">
+                    <div class="hsl">计算速度</div>
+                    <div id="hash-rate-value" class="hsv">0 H/s</div>
                 </div>
-                <div class="hash-stat-item">
-                    <div class="hash-stat-label">已计算</div>
-                    <div id="total-hashes-value" class="hash-stat-value">0</div>
+                <div class="hsi">
+                    <div class="hsl">已计算</div>
+                    <div id="total-hashes-value" class="hsv">0</div>
                 </div>
             </section>
         </main>

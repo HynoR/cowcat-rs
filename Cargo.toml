@@ -2,13 +2,16 @@
 name = "cowcat-rs"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 axum = "0.8"
 anyhow = "1"
 base64 = "0.22"
+bytes = "1"
 clap = { version = "4", features = ["derive"] }
 cookie = "0.18"
+flate2 = "1"
 hex = "0.4"
 http = "1"
 http-body-util = "0.1"
@@ -21,8 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 time = "0.3"
 tokio = { version = "1", features = ["full"] }
-toml = "0.8"
+toml = "0.9.8"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "compression-br"] }
+tower-http = { version = "0.6", features = ["trace", "compression-br" ,"compression-gzip"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

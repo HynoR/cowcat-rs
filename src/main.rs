@@ -1,6 +1,7 @@
 mod config;
 mod crypto;
 mod handlers;
+mod ip_source;
 mod middleware;
 mod protocol;
 mod proxy;
@@ -18,9 +19,10 @@ use axum::Router;
 use clap::Parser;
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::compression::CompressionLayer;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
 use crate::config::Config;
+use crate::handlers::favicon::favicon_handler;
 use crate::handlers::pow::{challenge_page, health_ok, pow_task, pow_verify, serve_asset};
 use crate::middleware::pow::pow_gate;
 use crate::proxy::forward::proxy_handler;
@@ -39,7 +41,10 @@ async fn main() -> anyhow::Result<()> {
 
     tracing_subscriber::fmt()
         .json()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env_lossy()
+        )
         .init();
 
     let config = Config::load(&args.config)?;
@@ -55,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(
             CompressionLayer::new()
                 .br(true)
+                .gzip(true)
                 .compress_when(
                     DefaultPredicate::new()
                         .and(NotForContentType::const_new("application/octet-stream")),
@@ -64,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
 
     let listen = state.config.server.listen.clone();
     let app = Router::new()
+        .route("/favicon.ico", get(favicon_handler))
         .nest("/__cowcatwaf", pow_routes)
         .fallback(proxy_handler)
         .layer(from_fn_with_state(state.clone(), pow_gate))
@@ -73,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .map_err(|err| anyhow::anyhow!("invalid listen address: {err}"))?;
 
-    tracing::info!(listen = %addr, "cowcat-rs starting");
+    tracing::warn!(listen = %addr, "cowcat-rs starting");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
 
