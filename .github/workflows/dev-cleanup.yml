@@ -1,0 +1,57 @@
+name: Cleanup dev-* images on release
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  cleanup-dev-history:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate gh
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Cleanup old dev-* images (keep only current dev)
+        env:
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: cowcat-rs
+          PACKAGE_TYPE: container
+        run: |
+          set -euo pipefail
+
+          echo "Fetching package versions…"
+
+          versions=$(gh api \
+            /users/$OWNER/packages/container/$PACKAGE/versions \
+            --paginate)
+
+          dev_digest=$(echo "$versions" | jq -r '
+            .[] 
+            | select(.metadata.container.tags[]? == "dev")
+            | .name
+          ' | head -n1)
+
+          if [ -z "$dev_digest" ]; then
+            echo "❌ dev tag not found, aborting"
+            exit 1
+          fi
+
+          echo "Current dev digest: $dev_digest"
+
+          echo "$versions" | jq -r '
+            .[]
+            | select(
+                (.metadata.container.tags[]? | startswith("dev-"))
+                and
+                (.name != "'"$dev_digest"'")
+              )
+            | .id
+          ' | while read -r id; do
+              echo "Deleting dev-* version id=$id"
+              gh api -X DELETE \
+                /users/$OWNER/packages/container/$PACKAGE/versions/$id
+            done

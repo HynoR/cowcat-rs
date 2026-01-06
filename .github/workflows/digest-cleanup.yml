@@ -1,0 +1,26 @@
+name: Manual cleanup GHCR untagged digests
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "Minimum number of untagged versions to keep"
+        required: false
+        default: "8"
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete untagged container image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: cowcat-rs
+          package-type: container
+          delete-only-untagged-versions: true
+          min-versions-to-keep: ${{ inputs.keep }}
