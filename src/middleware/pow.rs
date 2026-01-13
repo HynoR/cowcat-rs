@@ -109,16 +109,18 @@ pub async fn pow_gate(
     let accept_language = req.headers().get_string_or_default("Accept-Language");
     let host = req.headers().get_string_or_default("Host");
 
-    tracing::info!(
-        difficulty = state.config.pow.difficulty,
-        client_ip = %client_ip_str,
-        ip_source = %ip_source.get_string(),
-        user_agent = %user_agent,
-        accept_language = %accept_language,
-        path = %path,
-        host = %host,
-        "pow challenge (default)"
-    );
+    if !state.disable_print_new_task {
+        tracing::info!(
+            difficulty = state.config.pow.difficulty,
+            client_ip = %client_ip_str,
+            ip_source = %ip_source.get_string(),
+            user_agent = %user_agent,
+            accept_language = %accept_language,
+            path = %path,
+            host = %host,
+            "pow challenge (default)"
+        );
+    }
     let resp = build_challenge_response(
         &state,
         req.headers(),

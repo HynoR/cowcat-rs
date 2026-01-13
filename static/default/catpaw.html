@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>安全验证</title>
+    <style id="catpaw-style">{{ CatpawCSS }}</style>
+</head>
+<body>
+    <!-- 内嵌的任务数据 -->
+    <script id="pow-task-data" type="application/json">
+    {
+        "task": "{{ TaskData }}",
+        "redirect": "{{ RedirectURL }}"
+    }
+    </script>
+
+    <div id="app">
+        <main class="l">
+            <section>
+                <h1>安全验证</h1>
+                <div id="status-container" class="s"></div>
+                <div id="error-container" class="e" style="display: none;">
+                    <div class="et">验证失败</div>
+                    <div id="error-message" class="em"></div>
+                    <div id="error-details" class="ed" style="display: none;">
+                        <button id="error-details-toggle" class="edt">显示错误详情</button>
+                        <div id="error-details-content" class="edc" style="display: none;">
+                            <div id="error-details-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="v" aria-hidden="true">
+                <img id="visual-image-1" src="data:image/webp;base64,{{ CowcatImage1 }}" alt="Logo" width="256" height="256" style="display: block;">
+                <img id="visual-image-2" src="data:image/webp;base64,{{ CowcatImage2 }}" alt="Logo" width="256" height="256" style="display: none;">
+            </section>
+
+            <div id="manual-redirect-container" style="display: none;">
+                <button id="manual-redirect-btn" class="mrb" type="button">点击继续</button>
+            </div>
+
+            <section class="pc" aria-label="计算进度">
+                <div id="progress-percent" class="pp">0%</div>
+                <div class="pbw">
+                    <div id="progress-bar" class="pb" style="width: 0%;"></div>
+                </div>
+                <div id="progress-text" class="pt">初始化</div>
+            </section>
+
+            <section id="hash-stats" class="hs" aria-label="算力信息" style="display: none;">
+                <div class="hsi">
+                    <div class="hsl">计算速度</div>
+                    <div id="hash-rate-value" class="hsv">0 H/s</div>
+                </div>
+                <div class="hsi">
+                    <div class="hsl">已计算</div>
+                    <div id="total-hashes-value" class="hsv">0</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <template id="error-detail-template">
+        <div class="error-detail-item">
+            <div class="error-detail-label"></div>
+            <div data-field="phase"></div>
+            <div data-field="error"></div>
+            <div data-field="errorType"></div>
+            <div data-field="filename"></div>
+            <div data-field="errorStack"></div>
+            <div data-field="workerInfo"></div>
+            <div data-field="browserInfo"></div>
+        </div>
+    </template>
+
+    {{ MetaJS }}
+    {{ CoreJS }}
+    {{ StyleJS }}
+</body>
+</html>

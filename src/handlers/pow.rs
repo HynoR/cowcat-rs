@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::http::{header, HeaderMap, Request, Response, StatusCode, Uri};
 use axum::response::IntoResponse;
 use base64::Engine;
+use bytes::Bytes;
 use http_body_util::BodyExt;
 use serde::Deserialize;
 use serde_json::Value;
@@ -309,15 +311,18 @@ pub async fn challenge_fp(
 
 
 pub async fn serve_asset(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     axum::extract::Path(path): axum::extract::Path<String>,
 ) -> impl IntoResponse {
-    let file_path = format!("assets/{}", path.trim_start_matches('/'));
-    serve_static_file(&file_path)
+    let Some(normalized) = crate::static_files::sanitize_path(&path) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let file_path = format!("assets/{}", normalized);
+    serve_static_file(&state.assets, &file_path)
 }
 
-fn serve_static_file(path: &str) -> Response<axum::body::Body> {
-    let Some(bytes) = crate::static_files::get_asset(path) else {
+fn serve_static_file(assets: &HashMap<String, Bytes>, path: &str) -> Response<axum::body::Body> {
+    let Some(bytes) = assets.get(path) else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
@@ -331,7 +336,7 @@ fn serve_static_file(path: &str) -> Response<axum::body::Body> {
     if let Ok(value) = header::HeaderValue::from_str(cache_control) {
         headers.insert(header::CACHE_CONTROL, value);
     }
-    (headers, bytes).into_response()
+    (headers, bytes.clone()).into_response()
 }
 
 pub async fn health_ok() -> impl IntoResponse {
@@ -500,9 +505,9 @@ fn content_type_for(path: &str) -> &'static str {
 
 fn cache_control_for(path: &str) -> &'static str {
     if path.contains("catpaw.worker.js")
-        || path.contains("catpaw.js")
-        || path.contains("catpaw.min.js")
-        || path.contains("catpaw.worker.min.js")
+        || path.contains("catpaw.core.js")
+        || path.contains("catpaw.style.js")
+        || path.contains("meta.js")
         || path.contains("catpaw.html")
         || path.contains("catpaw.wasm")
     {

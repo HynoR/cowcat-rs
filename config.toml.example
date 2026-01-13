@@ -10,6 +10,13 @@ worker_type = "wasm"
 ip_policy = "none"
 test_mode = false
 
+[pow.page]
+custom = false
+html = "/path/to/custom.html"
+style_js = "/path/to/style.js"
+style_css = "/path/to/style.css"
+# enable_meta = false  # 是否启用 meta.js 脚本（默认禁用），可通过环境变量 COWCAT_ENABLE_META 设置
+
 [proxy]
 target = "http://127.0.0.1:1234"
 

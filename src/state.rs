@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -53,10 +54,12 @@ pub struct AppState {
     pub template: String,
     pub cowcat_image1: String,
     pub cowcat_image2: String,
+    pub assets: HashMap<String, Bytes>,
     pub proxy_client: Client<HttpConnector, axum::body::Body>,
     pub favicon_cache: Arc<tokio::sync::RwLock<Option<FaviconCache>>>,
     pub proxy_target: ProxyTarget,
     pub proxy_host_targets: Vec<HostProxyTarget>,
+    pub disable_print_new_task: bool,
 }
 
 impl AppState {
@@ -65,25 +68,30 @@ impl AppState {
         let task_store = TaskStore::new();
         let server_secret = build_server_secret(&config.pow.salt)?;
         tracing::debug!("server secret: {}", server_secret);
-        let (template, cowcat_image1, cowcat_image2) = crate::static_files::load_template_assets()?;
+        let template_assets = crate::static_files::load_template_assets(&config.pow.page)?;
 
         let proxy_client = Client::builder(TokioExecutor::new()).build(HttpConnector::new());
 
         let proxy_target = parse_proxy_target(&config.proxy.target)?;
         let proxy_host_targets = build_host_targets(&config.proxy.host_rule)?;
 
+        let disable_print_new_task = std::env::var("DISABLE_PRINT_NEW_TASK")
+            .unwrap_or_default() == "1";
+
         Ok(Self {
             config,
             rules,
             task_store,
             server_secret,
-            template,
-            cowcat_image1,
-            cowcat_image2,
+            template: template_assets.template,
+            cowcat_image1: template_assets.cowcat_image1,
+            cowcat_image2: template_assets.cowcat_image2,
+            assets: template_assets.assets,
             proxy_client,
             favicon_cache: Arc::new(tokio::sync::RwLock::new(None)),
             proxy_target,
             proxy_host_targets,
+            disable_print_new_task,
         })
     }
 }

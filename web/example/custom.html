@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>安全验证</title>
+</head>
+<body>
+    <!-- 必需：任务数据 -->
+    <script id="pow-task-data" type="application/json">
+    {
+        "task": "{{ TaskData }}",
+        "redirect": "{{ RedirectURL }}"
+    }
+    </script>
+
+    <div>
+        <section class="v" aria-hidden="true">
+            <!-- 可选：视觉图片1 计算中 -->
+            <img id="visual-image-1" src="data:image/webp;base64,{{ CowcatImage1 }}" alt="Logo" width="256" height="256" style="display: block;">
+            <!-- 可选：视觉图片2  完成-->
+            <img id="visual-image-2" src="data:image/webp;base64,{{ CowcatImage2 }}" alt="Logo" width="256" height="256" style="display: none;">
+        </section>
+    </div>
+    
+    <!-- 可选：meta.js -->
+    {{ MetaJS }}
+    <!-- 必需：core.js -->
+    {{ CoreJS }}
+    <!-- 可选：style.js -->
+    {{ StyleJS }}
+</body>
+</html>

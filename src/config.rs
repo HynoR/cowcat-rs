@@ -148,6 +148,16 @@ impl Config {
             }
         }
 
+        if let Ok(v) = env::var("COWCAT_ENABLE_META") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                let b = trimmed.parse::<bool>().map_err(|err| {
+                    anyhow::anyhow!("环境变量 COWCAT_ENABLE_META 格式错误: {err}")
+                })?;
+                self.pow.page.enable_meta = b;
+            }
+        }
+
         // Proxy config
         if let Ok(v) = env::var("COWCAT_PROXY_TARGET") {
             let trimmed = v.trim().to_string();
@@ -208,6 +218,7 @@ pub struct PowConfig {
     pub ip_policy: IpPolicy,
     pub test_mode: bool,
     pub secure: bool,
+    pub page: PowPageConfig,
 }
 
 impl Default for PowConfig {
@@ -221,6 +232,29 @@ impl Default for PowConfig {
             ip_policy: IpPolicy::None,
             test_mode: false,
             secure: true,
+            page: PowPageConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct PowPageConfig {
+    pub custom: bool,
+    pub html: String,
+    pub style_js: String,
+    pub style_css: String,
+    pub enable_meta: bool,
+}
+
+impl Default for PowPageConfig {
+    fn default() -> Self {
+        Self {
+            custom: false,
+            html: String::new(),
+            style_js: String::new(),
+            style_css: String::new(),
+            enable_meta: false,
         }
     }
 }
