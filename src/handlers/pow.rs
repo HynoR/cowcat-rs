@@ -6,6 +6,7 @@ use axum::response::IntoResponse;
 use base64::Engine;
 use http_body_util::BodyExt;
 use serde::Deserialize;
+use serde_json::Value;
 use time::OffsetDateTime;
 
 use crate::config::IpPolicy;
@@ -251,18 +252,77 @@ pub async fn pow_verify(
     (headers, frame).into_response()
 }
 
+pub async fn challenge_fp(
+    State(_state): State<Arc<AppState>>,
+    req: Request<axum::body::Body>,
+) -> impl IntoResponse {
+    let (parts, body) = req.into_parts();
+    let body = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    if body.is_empty() {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+
+    let payload_b64 = String::from_utf8_lossy(&body).trim().to_string();
+    if payload_b64.is_empty() {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+
+    let decoded = match base64::engine::general_purpose::STANDARD.decode(payload_b64.as_bytes()) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            tracing::warn!(error = %err, "challenge fp base64 decode failed");
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+
+    let decoded_str = String::from_utf8_lossy(&decoded).to_string();
+    let final_ip = resolve_request_ip(&parts.headers, &parts.extensions);
+    let user_agent = headers_user_agent(&parts.headers);
+
+    match serde_json::from_str::<Value>(&decoded_str) {
+        Ok(value) => {
+            tracing::info!(
+                client_ip = %final_ip.0,
+                ip_source = %final_ip.1.get_string(),
+                user_agent = %user_agent,
+                payload = ?value,
+                "challenge fp payload"
+            );
+        }
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                client_ip = %final_ip.0,
+                ip_source = %final_ip.1.get_string(),
+                user_agent = %user_agent,
+                payload = %decoded_str,
+                "challenge fp json parse failed"
+            );
+        }
+    }
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
 
 pub async fn serve_asset(
     State(_state): State<Arc<AppState>>,
     axum::extract::Path(path): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     let file_path = format!("assets/{}", path.trim_start_matches('/'));
-    let Some(bytes) = crate::static_files::get_asset(&file_path) else {
+    serve_static_file(&file_path)
+}
+
+fn serve_static_file(path: &str) -> Response<axum::body::Body> {
+    let Some(bytes) = crate::static_files::get_asset(path) else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    let content_type = content_type_for(&file_path);
-    let cache_control = cache_control_for(&file_path);
+    let content_type = content_type_for(path);
+    let cache_control = cache_control_for(path);
 
     let mut headers = HeaderMap::new();
     if let Ok(value) = header::HeaderValue::from_str(content_type) {

@@ -432,6 +432,42 @@
         return Math.max(0, Math.min(100, progress));
     }
 
+    function base64EncodeUtf8(value) {
+        try {
+            return btoa(unescape(encodeURIComponent(value)));
+        } catch (err) {
+            console.warn('Failed to base64 encode stats payload:', err);
+            return '';
+        }
+    }
+
+    function sendChallengeStats() {
+        const endpoint = '/__cowcatwaf/challenge/fp';
+        if (window.__cowcat_meta__ && typeof window.__cowcat_meta__.send === 'function') {
+            return window.__cowcat_meta__.send(endpoint);
+        }
+        if (window.__challenge_fp__) {
+            const payload = base64EncodeUtf8(JSON.stringify(window.__challenge_fp__));
+            if (!payload) {
+                return Promise.resolve();
+            }
+            return fetch(endpoint, { method: 'POST', body: payload, keepalive: true });
+        }
+        return Promise.resolve();
+    }
+
+    function sendChallengeStatsAllowFail(timeoutMs) {
+        const statsPromise = Promise.resolve()
+            .then(sendChallengeStats)
+            .catch(function(err) {
+                console.warn('Failed to send challenge stats:', err);
+            });
+        const timeoutPromise = new Promise(function(resolve) {
+            setTimeout(resolve, timeoutMs);
+        });
+        return Promise.race([statsPromise, timeoutPromise]);
+    }
+
     // ===== Progress Tracking =====
 
     let computeStartTime = null;
@@ -663,6 +699,8 @@
             if (elements.visualImage2) {
                 elements.visualImage2.style.display = 'block';
             }
+
+            await sendChallengeStatsAllowFail(800);
 
             // 检查是否是手动跳转模式
             if (state.manualRedirect) {

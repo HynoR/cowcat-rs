@@ -22,7 +22,7 @@ use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
 use crate::config::Config;
 use crate::handlers::favicon::favicon_handler;
-use crate::handlers::pow::{challenge_page, health_ok, pow_task, pow_verify, serve_asset};
+use crate::handlers::pow::{challenge_fp, challenge_page, health_ok, pow_task, pow_verify, serve_asset};
 use crate::middleware::pow::pow_gate;
 use crate::proxy::forward::proxy_handler;
 use crate::state::AppState;
@@ -55,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/ok", get(health_ok))
         .route("/assets/{*path}", get(serve_asset))
         .route("/task", post(pow_task))
+        .route("/challenge/fp", post(challenge_fp))
         .route("/verify", post(pow_verify))
         .layer(
             CompressionLayer::new()
