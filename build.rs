@@ -2,12 +2,12 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    println!("cargo:rerun-if-changed=static/catpaw.css");
+    println!("cargo:rerun-if-changed=static/default/catpaw.css");
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=static/assets/catpaw.min.css");
+    println!("cargo:rerun-if-changed=static/core_minify/catpaw.min.css");
 
-    let input = Path::new("static/catpaw.css");
-    let output = Path::new("static/assets/catpaw.min.css");
+    let input = Path::new("static/default/catpaw.css");
+    let output = Path::new("static/core_minify/catpaw.min.css");
 
     let Ok(raw) = fs::read_to_string(input) else {
         eprintln!("build: missing {}", input.display());

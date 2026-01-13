@@ -123,7 +123,7 @@ fn load_embedded_defaults() -> anyhow::Result<EmbeddedDefaults> {
     assets.insert("assets/catpaw.style.js".to_string(), style_js);
 
     let template_raw = load_embedded_string("default/catpaw.html")?;
-    let css = load_embedded_string("default/catpaw.css")?;
+    let css = load_embedded_string("core_minify/catpaw.min.css").or_else(|_| load_embedded_string("default/catpaw.css"))?;
 
     let cowcat1 = load_embedded_bytes("default/cowcat1.webp")?;
     let cowcat2 = load_embedded_bytes("default/cowcat2.webp")?;
