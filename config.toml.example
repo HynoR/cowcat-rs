@@ -9,6 +9,9 @@ workers = 4
 worker_type = "wasm"
 ip_policy = "none"
 test_mode = false
+# Optional: override cowcat images with local files.
+# cowcat_image1_path = "/path/to/cowcat1.webp"
+# cowcat_image2_path = "/path/to/cowcat2.webp"
 
 [proxy]
 target = "http://127.0.0.1:1234"

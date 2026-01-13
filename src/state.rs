@@ -65,7 +65,10 @@ impl AppState {
         let task_store = TaskStore::new();
         let server_secret = build_server_secret(&config.pow.salt)?;
         tracing::debug!("server secret: {}", server_secret);
-        let (template, cowcat_image1, cowcat_image2) = crate::static_files::load_template_assets()?;
+        let (template, cowcat_image1, cowcat_image2) = crate::static_files::load_template_assets(
+            config.pow.cowcat_image1_path.as_deref(),
+            config.pow.cowcat_image2_path.as_deref(),
+        )?;
 
         let proxy_client = Client::builder(TokioExecutor::new()).build(HttpConnector::new());
 

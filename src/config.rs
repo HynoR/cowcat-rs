@@ -208,6 +208,8 @@ pub struct PowConfig {
     pub ip_policy: IpPolicy,
     pub test_mode: bool,
     pub secure: bool,
+    pub cowcat_image1_path: Option<String>,
+    pub cowcat_image2_path: Option<String>,
 }
 
 impl Default for PowConfig {
@@ -221,6 +223,8 @@ impl Default for PowConfig {
             ip_policy: IpPolicy::None,
             test_mode: false,
             secure: true,
+            cowcat_image1_path: None,
+            cowcat_image2_path: None,
         }
     }
 }
