@@ -16,7 +16,10 @@ target
 
 config.toml
 
+
 *.md
+!README.md
+
 
 .DS_Store
 # RustRover
