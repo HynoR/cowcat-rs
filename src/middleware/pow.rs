@@ -48,7 +48,7 @@ pub async fn pow_gate(
         return next.run(req).await;
     }
 
-    if state.rules.allow_wellknown && is_wellknown_path(req.uri().path()) {
+    if state.rules.load().allow_wellknown && is_wellknown_path(req.uri().path()) {
         tracing::debug!(path = %req.uri().path(), "pow bypass for wellknown whitelist path");
         return next.run(req).await;
     }
@@ -141,7 +141,7 @@ fn evaluate_rules(
     headers: &HeaderMap,
     client_ip: Option<IpAddr>,
 ) -> Option<RuleDecision> {
-    state.rules.evaluate(path, headers, client_ip)
+    state.rules.load().evaluate(path, headers, client_ip)
 }
 
 fn is_pow_path(path: &str) -> bool {

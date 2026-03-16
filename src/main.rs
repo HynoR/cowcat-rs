@@ -6,6 +6,7 @@ mod middleware;
 mod protocol;
 mod proxy;
 mod rules;
+mod rules_watcher;
 mod state;
 mod static_files;
 mod storage;
@@ -50,6 +51,8 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load(&args.config)?;
     config.print_config();
     let state = Arc::new(AppState::new(config).await?);
+
+    rules_watcher::start_rules_watcher(state.clone(), args.config.clone());
 
     let pow_routes = Router::new()
         .route("/", get(challenge_page))
