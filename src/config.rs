@@ -43,10 +43,52 @@ impl Config {
             toml::from_str(&raw)
                 .map_err(|err| anyhow::anyhow!("failed to parse config {path}: {err}"))?
         };
+
+        cfg.load_external_rules(path)?;
+
         cfg.apply_defaults();
         cfg.apply_env()?;
         cfg.validate()?;
         Ok(cfg)
+    }
+
+    fn load_external_rules(&mut self, config_path: &str) -> anyhow::Result<()> {
+        let rules_file = match &self.rules.rules_file {
+            Some(f) if !f.trim().is_empty() => f.clone(),
+            _ => return Ok(()),
+        };
+
+        let config_dir = std::path::Path::new(config_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let rules_path = config_dir.join(&rules_file);
+
+        let rules_raw = fs::read_to_string(&rules_path).map_err(|err| {
+            anyhow::anyhow!(
+                "failed to read rules file {}: {}",
+                rules_path.display(),
+                err
+            )
+        })?;
+
+        let mut rules_cfg: RulesConfig = toml::from_str(&rules_raw).map_err(|err| {
+            anyhow::anyhow!(
+                "failed to parse rules file {}: {}",
+                rules_path.display(),
+                err
+            )
+        })?;
+
+        rules_cfg.rules_file = self.rules.rules_file.take();
+
+        tracing::info!(
+            path = %rules_path.display(),
+            rules = rules_cfg.rule.len(),
+            "loaded external rules file"
+        );
+
+        self.rules = rules_cfg;
+        Ok(())
     }
 
     fn apply_defaults(&mut self) {
@@ -178,7 +220,16 @@ impl Config {
         tracing::info!("POW: {:?}", self.pow);
         tracing::info!("PROXY: {:?}", self.proxy);
         if self.rules.enabled {
-            tracing::info!("RULES: {} rules , default action: {:?}", self.rules.get_rule_len(), self.rules.default_action);
+            tracing::info!(
+                "RULES: {}/{} rules (enabled/total), default_action: {:?}, allow_wellknown: {}",
+                self.rules.get_enabled_rule_len(),
+                self.rules.get_rule_len(),
+                self.rules.default_action,
+                self.rules.allow_wellknown,
+            );
+            if let Some(ref f) = self.rules.rules_file {
+                tracing::info!("RULES: loaded from external file: {}", f);
+            }
         }
     }
 }
@@ -266,6 +317,8 @@ impl Default for IpPolicy {
 pub struct RulesConfig {
     pub enabled: bool,
     pub default_action: RuleAction,
+    pub allow_wellknown: bool,
+    pub rules_file: Option<String>,
     pub rule: Vec<RuleConfig>,
 }
 
@@ -274,6 +327,8 @@ impl Default for RulesConfig {
         Self {
             enabled: false,
             default_action: RuleAction::Challenge,
+            allow_wellknown: true,
+            rules_file: None,
             rule: Vec::new(),
         }
     }
@@ -283,12 +338,17 @@ impl RulesConfig {
     pub fn get_rule_len(&self) -> usize {
         self.rule.len()
     }
+
+    pub fn get_enabled_rule_len(&self) -> usize {
+        self.rule.iter().filter(|r| r.enabled).count()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct RuleConfig {
     pub name: Option<String>,
+    pub enabled: bool,
     pub action: RuleAction,
     pub difficulty_delta: Option<i32>,
     pub path_prefix: Option<String>,
@@ -301,6 +361,7 @@ impl Default for RuleConfig {
     fn default() -> Self {
         Self {
             name: None,
+            enabled: true,
             action: RuleAction::Challenge,
             difficulty_delta: None,
             path_prefix: None,

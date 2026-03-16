@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use arc_swap::ArcSwap;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use bytes::Bytes;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -47,7 +48,7 @@ impl FaviconCache {
 
 pub struct AppState {
     pub config: Config,
-    pub rules: RulesEngine,
+    pub rules: ArcSwap<RulesEngine>,
     pub task_store: Arc<TaskStore>,
     pub server_secret: String,
     pub template: String,
@@ -74,7 +75,7 @@ impl AppState {
 
         Ok(Self {
             config,
-            rules,
+            rules: ArcSwap::new(Arc::new(rules)),
             task_store,
             server_secret,
             template,

@@ -48,6 +48,11 @@ pub async fn pow_gate(
         return next.run(req).await;
     }
 
+    if state.rules.load().allow_wellknown && is_wellknown_path(req.uri().path()) {
+        tracing::debug!(path = %req.uri().path(), "pow bypass for wellknown whitelist path");
+        return next.run(req).await;
+    }
+
     if state.config.pow.test_mode {
         tracing::info!("pow test mode enabled: forcing challenge");
         let resp = build_challenge_response(
@@ -136,11 +141,22 @@ fn evaluate_rules(
     headers: &HeaderMap,
     client_ip: Option<IpAddr>,
 ) -> Option<RuleDecision> {
-    state.rules.evaluate(path, headers, client_ip)
+    state.rules.load().evaluate(path, headers, client_ip)
 }
 
 fn is_pow_path(path: &str) -> bool {
     path.starts_with(POW_PREFIX)
+}
+
+const WELLKNOWN_PREFIX: &str = "/.well-known/";
+const WELLKNOWN_EXACT: &[&str] = &["/robots.txt", "/sitemap.xml", "/sitemap_index.xml", "/ads.txt", "/app-ads.txt"];
+
+fn is_wellknown_path(path: &str) -> bool {
+    if path.starts_with(WELLKNOWN_PREFIX) {
+        return true;
+    }
+    let path_lower = path.to_ascii_lowercase();
+    WELLKNOWN_EXACT.iter().any(|p| path_lower == *p)
 }
 
 fn is_service_worker_request(req: &Request) -> bool {
