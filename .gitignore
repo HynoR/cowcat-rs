@@ -19,6 +19,7 @@ config.toml
 
 *.md
 !README.md
+!AGENTS.md
 
 
 .DS_Store
