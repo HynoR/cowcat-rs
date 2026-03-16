@@ -1,0 +1,62 @@
+# CowCat Rules Configuration
+# This file can be referenced from config.toml via:
+#   [rules]
+#   rules_file = "rules.toml"
+#
+# Rules are evaluated from top to bottom; the first matching rule wins.
+# If no rule matches, the default_action is used as fallback.
+
+enabled = true
+default_action = "challenge"
+
+# allow_wellknown controls whether well-known paths bypass PoW and rules entirely.
+# Well-known paths: /.well-known/*, /robots.txt, /sitemap.xml, /sitemap_index.xml, /ads.txt, /app-ads.txt
+# true  = these paths are always allowed without PoW challenge or rule matching (default)
+# false = these paths go through normal rule matching and PoW challenge
+allow_wellknown = true
+
+# --- Rules ---
+# Each rule supports the following fields:
+#   name             - (optional) human-readable name for logging
+#   enabled          - (optional, default true) set to false to disable this rule
+#   action           - "allow" | "block" | "challenge"
+#   difficulty_delta - (optional) adjust PoW difficulty: positive = harder, negative = easier
+#   path_prefix      - (optional) match if request path starts with this value
+#   path_exact       - (optional) match if request path equals this value exactly
+#   header           - (optional) match HTTP header: { name = "...", equals = "..." } or { name = "...", contains = "..." }
+#   ip_cidr          - (optional) match client IP against CIDR list: ["10.0.0.0/8", "192.168.1.0/24"]
+#
+# All conditions within a rule are AND-ed: all specified conditions must match.
+
+[[rule]]
+name = "acme-http01"
+path_prefix = "/.well-known/acme-challenge/"
+action = "allow"
+
+[[rule]]
+name = "trusted-internal"
+ip_cidr = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+action = "allow"
+
+[[rule]]
+name = "uptime-bot"
+header = { name = "User-Agent", contains = "UptimeRobot" }
+action = "challenge"
+difficulty_delta = -2
+
+[[rule]]
+name = "block-admin"
+path_prefix = "/admin"
+action = "block"
+
+[[rule]]
+name = "high-difficulty-api"
+path_prefix = "/api/sensitive"
+action = "challenge"
+difficulty_delta = 2
+
+[[rule]]
+name = "disabled-example"
+enabled = false
+path_prefix = "/test"
+action = "allow"

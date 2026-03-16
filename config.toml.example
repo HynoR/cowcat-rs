@@ -20,6 +20,8 @@ target = "http://127.0.0.1:8081"
 [rules]
 enabled = true
 default_action = "challenge"
+allow_wellknown = true
+# rules_file = "rules.toml"  # uncomment to load rules from external file
 
 [[rules.rule]]
 name = "acme-http01"

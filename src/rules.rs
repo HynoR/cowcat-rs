@@ -17,6 +17,7 @@ pub enum RuleAction {
 #[derive(Debug, Clone)]
 pub struct RulesEngine {
     enabled: bool,
+    pub allow_wellknown: bool,
     default_action: RuleAction,
     rules: Vec<Rule>,
 }
@@ -53,7 +54,16 @@ pub struct RuleDecision {
 impl RulesEngine {
     pub fn from_config(cfg: &RulesConfig) -> anyhow::Result<Self> {
         let mut rules = Vec::new();
+        let mut skipped = 0usize;
         for rule_cfg in &cfg.rule {
+            if !rule_cfg.enabled {
+                skipped += 1;
+                tracing::info!(
+                    rule = rule_cfg.name.as_deref().unwrap_or("unnamed"),
+                    "rule disabled, skipping"
+                );
+                continue;
+            }
             let ip_nets = parse_ip_nets(rule_cfg.ip_cidr.as_deref().unwrap_or_default())?;
             let header = rule_cfg.header.as_ref().map(to_header_predicate).transpose()?;
             let matcher = Matcher {
@@ -70,8 +80,12 @@ impl RulesEngine {
             };
             rules.push(rule);
         }
+        if skipped > 0 {
+            tracing::info!(skipped, "disabled rules skipped");
+        }
         Ok(Self {
             enabled: cfg.enabled,
+            allow_wellknown: cfg.allow_wellknown,
             default_action: cfg.default_action.clone(),
             rules,
         })
