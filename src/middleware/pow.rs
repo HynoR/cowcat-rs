@@ -48,6 +48,17 @@ pub async fn pow_gate(
         return next.run(req).await;
     }
 
+    if is_prefetch_request(&req) {
+        tracing::info!(
+            path = %req.uri().path(),
+            sec_purpose = req.headers().get_str("sec-purpose").unwrap_or("-"),
+            purpose = req.headers().get_str("purpose").unwrap_or("-"),
+            x_middleware_prefetch = req.headers().get_str("x-middleware-prefetch").unwrap_or("-"),
+            "pow bypass for prefetch/speculation request"
+        );
+        return next.run(req).await;
+    }
+
     if state.rules.load().allow_wellknown && is_wellknown_path(req.uri().path()) {
         tracing::debug!(path = %req.uri().path(), "pow bypass for wellknown whitelist path");
         return next.run(req).await;
@@ -157,6 +168,31 @@ fn is_wellknown_path(path: &str) -> bool {
     }
     let path_lower = path.to_ascii_lowercase();
     WELLKNOWN_EXACT.iter().any(|p| path_lower == *p)
+}
+
+fn is_prefetch_request(req: &Request) -> bool {
+    if req.method() != Method::GET && req.method() != Method::HEAD {
+        return false;
+    }
+    // Standard: Sec-Purpose: prefetch (Chrome, Edge, etc.)
+    if let Some(val) = req.headers().get_str("sec-purpose") {
+        if val.trim().eq_ignore_ascii_case("prefetch") {
+            return true;
+        }
+    }
+    // Legacy: Purpose: prefetch (older browsers)
+    if let Some(val) = req.headers().get_str("purpose") {
+        if val.trim().eq_ignore_ascii_case("prefetch") {
+            return true;
+        }
+    }
+    // Next.js middleware prefetch
+    if let Some(val) = req.headers().get_str("x-middleware-prefetch") {
+        if val.trim() == "1" {
+            return true;
+        }
+    }
+    false
 }
 
 fn is_service_worker_request(req: &Request) -> bool {

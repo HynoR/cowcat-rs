@@ -1,17 +1,32 @@
 [server]
-listen = "0.0.0.0:8080"
+listen = "0.0.0.0:8080"   # 环境变量: COWCAT_SERVER_LISTEN
 
+# ── PoW 快速配置 ─────────────────────────────────────────────────────────────
+# 所有字段均可通过 Docker 环境变量覆盖（优先级高于配置文件）。
+# 纯 Docker 用户可以不挂载配置文件，直接在 docker-compose.yml 中设置环境变量。
+#
+#   字段                   环境变量                          取值说明
+#   difficulty          COWCAT_POW_DIFFICULTY             0~10，0=关闭 PoW
+#   cookie_expire_hours COWCAT_POW_COOKIE_EXPIRE_HOURS    Cookie 有效小时数
+#   salt                COWCAT_POW_SALT                   任意随机字符串（必填，保持保密）
+#   workers             COWCAT_POW_WORKERS                前端 Worker 线程数 1~8
+#   worker_type         CATPOW_WORKER_TYPE                wasm（默认）或 native
+#   ip_policy           COWCAT_POW_IP_POLICY              none / enable / strict
+#   test_mode           COWCAT_POW_TEST_MODE              true=强制挑战模式（调试用）
+#   -                   COWCAT_SERVER_LISTEN              监听地址，默认 0.0.0.0:8080
+#   -                   COWCAT_PROXY_TARGET               上游地址，如 http://app:3000
+# ─────────────────────────────────────────────────────────────────────────────
 [pow]
 difficulty = 3
 cookie_expire_hours = 24
-salt = "awgawmlfa"
+salt = "awgawmlfa"           # 生产环境请替换为足够长的随机字符串，并保持保密
 workers = 4
-worker_type = "wasm"
-ip_policy = "none"
-test_mode = false
+worker_type = "wasm"         # wasm: 前端用 WebAssembly 计算；native: 用纯 JS 计算
+ip_policy = "none"           # none: 不绑定 IP；enable: 绑定 IP；strict: 严格绑定
+test_mode = false            # true 时每次请求都强制弹出挑战页，仅调试使用
 
 [proxy]
-target = "http://127.0.0.1:1234"
+target = "http://127.0.0.1:1234"   # 环境变量: COWCAT_PROXY_TARGET
 
 [[proxy.host_rule]]
 host = "example.com"
@@ -38,3 +53,12 @@ difficulty_delta = -2
 name = "block-admin"
 path_prefix = "/admin"
 action = "block"
+
+# Prefetch/speculation requests are automatically bypassed by the PoW gate
+# without needing rules. If you want to explicitly block prefetch instead of
+# allowing it through, you can add a rule like:
+#
+# [[rules.rule]]
+# name = "block-prefetch"
+# header = { name = "Sec-Purpose", equals = "prefetch" }
+# action = "block"
